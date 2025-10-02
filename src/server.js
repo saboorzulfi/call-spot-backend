@@ -15,6 +15,9 @@ class Server {
       await new Database().connect();
       console.log("Database connected successfully");
 
+      // Backend services initialized
+      console.log("Backend services initialized");
+
       // Start the server
       this.app.getApp().listen(this.port, () => {
         console.log(`🚀 Server running on port ${this.port}`);

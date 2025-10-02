@@ -14,6 +14,9 @@ router.get("/:id", callController.getById);                   // GET /calls/:id
 router.put("/:id", callController.update);                    // PUT /calls/:id
 router.delete("/:id", callController.delete);                 // DELETE /calls/:id
 
+// Start call flow
+router.post("/start", callController.start);                 // POST /call/start
+
 // Import call endpoint (equivalent to Go backend /import-call)
 router.post("/import-call", uploadExcel.single('file'), callController.importCall);  // POST /import-call
 

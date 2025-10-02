@@ -5,6 +5,7 @@ const agentGroupRoutes = require("./agentGroup.routes");
 const campaignRoutes = require("./campaign.routes");
 const callRoutes = require("./call.routes");
 const blocklistRoutes = require("./blocklist.routes");
+const facebookRoutes = require("./facebook.routes");
 const { isLoggedIn } = require("../middlewares/auth.middleware");
 const { statusCheckMiddleware } = require("../middlewares/status.middleware");
 
@@ -25,5 +26,6 @@ router.use("/agent-group", agentGroupRoutes);
 router.use("/campaign", campaignRoutes);
 router.use("/call", callRoutes);
 router.use("/block", blocklistRoutes);
+router.use("/facebook", facebookRoutes);
 
 module.exports = router;

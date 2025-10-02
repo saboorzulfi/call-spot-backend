@@ -13,6 +13,24 @@ class CallController {
     this.leadRepo = new LeadRepository();
   }
 
+  // POST /call/start - Initiate a call flow (placeholder)
+  start = tryCatchAsync(async (req, res, next) => {
+    const accountId = req.account._id;
+    const { lead_number, widget_id } = req.body;
+
+    if (!lead_number) {
+      throw new AppError("lead_id is required", 400);
+    }
+
+    // TODO: Implement call initiation logic
+    return AppResponse.success(res, {
+      message: "Call initiation placeholder",
+      lead_id: lead_id,
+      widget_id,
+      account_id: accountId
+    }, "Call initiation accepted", statusCode.ACCEPTED || 202);
+  });
+
   // POST /calls/import-call - Import calls from Excel
   importCall = tryCatchAsync(async (req, res, next) => {
     const { widget_key } = req.body;
@@ -179,7 +197,7 @@ class CallController {
   // GET /calls - Get all calls for account
   getAll = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-    const { page, limit, search, sortBy, sortOrder, status, source,campaignID,agentID,startDate,endDate } = req.query;
+    const { page, limit, search, sortBy, sortOrder, status, source, campaignID, agentID, startDate, endDate } = req.query;
 
     const options = {
       page: parseInt(page) || 1,
