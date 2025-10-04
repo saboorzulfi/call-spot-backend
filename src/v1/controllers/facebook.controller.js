@@ -82,6 +82,34 @@ class FacebookController {
 
     return AppResponse.success(res, leads, "Data retrieved successfully", statusCode.OK);
   });
+
+  // PUT /facebook/campaign/:id - Update campaign with Facebook data (aligned with Go backend)
+  updateCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
+    const { id } = req.params;
+    const { facebook_page_id, facebook_form_id, facebook_page_token } = req.body;
+    const accountId = req.account._id;
+
+    if (!facebook_page_id || !facebook_form_id || !facebook_page_token) {
+      throw new AppError("facebook_page_id, facebook_form_id, and facebook_page_token are required", 400);
+    }
+
+    const result = await this.facebookService.updateCampaignWithFacebookData(id, {
+      facebook_page_id,
+      facebook_form_id,
+      facebook_page_token
+    });
+
+    return AppResponse.success(res, result, "Campaign updated with Facebook data successfully", statusCode.OK);
+  });
+
+  // GET /facebook/campaigns - Get campaigns with Facebook integration (aligned with Go backend)
+  getCampaignsWithFacebookData = tryCatchAsync(async (req, res, next) => {
+    const accountId = req.account._id;
+
+    const result = await this.facebookService.getCampaignsWithFacebookData(accountId);
+
+    return AppResponse.success(res, result, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
+  });
 }
 
 module.exports = FacebookController;

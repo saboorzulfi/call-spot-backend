@@ -6,6 +6,7 @@ const campaignRoutes = require("./campaign.routes");
 const callRoutes = require("./call.routes");
 const blocklistRoutes = require("./blocklist.routes");
 const facebookRoutes = require("./facebook.routes");
+const integrationRoutes = require("./integration.routes");
 const { isLoggedIn } = require("../middlewares/auth.middleware");
 const { statusCheckMiddleware } = require("../middlewares/status.middleware");
 
@@ -27,5 +28,6 @@ router.use("/campaign", campaignRoutes);
 router.use("/call", callRoutes);
 router.use("/block", blocklistRoutes);
 router.use("/facebook", facebookRoutes);
+router.use("/integration", integrationRoutes);
 
 module.exports = router;

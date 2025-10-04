@@ -15,4 +15,8 @@ router.get("/form", facebookController.getForms);                        // GET 
 router.get("/form-fields", facebookController.getFormFields);            // GET /facebook/form-fields
 router.get("/leads", facebookController.getLeads);                       // GET /facebook/leads
 
+// Facebook campaign integration endpoints (aligned with Go backend widget integration)
+router.put("/campaign/:id", facebookController.updateCampaignWithFacebookData); // PUT /facebook/campaign/:id
+router.get("/campaigns", facebookController.getCampaignsWithFacebookData);      // GET /facebook/campaigns
+
 module.exports = router;

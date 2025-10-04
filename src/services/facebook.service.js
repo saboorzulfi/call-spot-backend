@@ -1,10 +1,12 @@
 const axios = require('axios');
 const AccountRepository = require('../v1/repositories/account.repository');
+const CampaignRepository = require('../v1/repositories/campaign.repository');
 const { encrypt, decrypt } = require('../utils/encryption.util');
 
 class FacebookService {
   constructor() {
     this.accountRepo = new AccountRepository();
+    this.campaignRepo = new CampaignRepository();
     this.baseURL = 'https://graph.facebook.com/v21.0';
   }
 
@@ -147,6 +149,50 @@ class FacebookService {
     } catch (error) {
       console.error('Error fetching Facebook leads:', error);
       throw new Error(`Failed to fetch Facebook leads: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update campaign with Facebook data (aligned with Go backend widget integration)
+   */
+  async updateCampaignWithFacebookData(campaignId, facebookData) {
+    try {
+      const campaign = await this.campaignRepo.update(campaignId, {
+        facebook_data: {
+          facebook_page_id: facebookData.facebook_page_id,
+          facebook_form_id: facebookData.facebook_form_id,
+          facebook_page_token: facebookData.facebook_page_token
+        }
+      });
+
+      return campaign;
+    } catch (error) {
+      console.error('Error updating campaign with Facebook data:', error);
+      throw new Error(`Failed to update campaign with Facebook data: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get campaigns with Facebook integration (aligned with Go backend)
+   */
+  async getCampaignsWithFacebookData(accountId) {
+    try {
+      const campaigns = await this.campaignRepo.findByAccountId(accountId);
+      
+      // Filter campaigns that have Facebook data
+      const facebookCampaigns = campaigns.campaigns.filter(campaign => 
+        campaign.facebook_data && 
+        campaign.facebook_data.facebook_page_id && 
+        campaign.facebook_data.facebook_form_id
+      );
+
+      return {
+        campaigns: facebookCampaigns,
+        pagination: campaigns.pagination
+      };
+    } catch (error) {
+      console.error('Error fetching campaigns with Facebook data:', error);
+      throw new Error(`Failed to fetch campaigns with Facebook data: ${error.message}`);
     }
   }
 
