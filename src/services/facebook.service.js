@@ -16,7 +16,7 @@ class FacebookService {
   async getLongLivedToken(accessToken) {
     try {
       const url = `${this.baseURL}/oauth/access_token?client_id=${process.env.FACEBOOK_APP_ID}&client_secret=${process.env.FACEBOOK_APP_SECRET}&grant_type=fb_exchange_token&fb_exchange_token=${accessToken}`;
-      
+      console.log('url', url);
       const response = await axios.get(url);
       
       if (response.data.access_token) {
@@ -69,13 +69,13 @@ class FacebookService {
         throw new Error('User not found');
       }
 
-      if (!user.facebookAccessToken || !user.facebookUserId) {
+      if (!user.facebook_access_token || !user.facebook_user_id) {
         return { data: [] }; // Return empty if no Facebook integration
       }
 
       // Decrypt Facebook credentials
-      const facebookUserId = await decrypt(user.facebookUserId);
-      const facebookAccessToken = await decrypt(user.facebookAccessToken);
+      const facebookUserId = await decrypt(user.facebook_user_id);
+      const facebookAccessToken = await decrypt(user.facebook_access_token);
 
       // Make API call to Facebook (aligned with Go backend)
       const url = `${this.baseURL}/${facebookUserId}/accounts?limit=250`;

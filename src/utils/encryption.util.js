@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 // Use environment variable for encryption key or default
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-32-character-secret-key-here!'; // 32 chars
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
 const ALGORITHM = 'aes-256-cbc';
 
 /**

@@ -11,7 +11,7 @@ const facebookController = new FacebookController();
 router.post("/access-token", facebookController.saveAccessToken);        // POST /facebook/access-token
 router.delete("/access-token", facebookController.deleteAccessToken);   // DELETE /facebook/access-token
 router.get("/page", facebookController.getPages);                        // GET /facebook/page
-router.get("/form", facebookController.getForms);                        // GET /facebook/form
+router.post("/form", facebookController.getForms);                        // GET /facebook/form
 router.get("/form-fields", facebookController.getFormFields);            // GET /facebook/form-fields
 router.get("/leads", facebookController.getLeads);                       // GET /facebook/leads
 

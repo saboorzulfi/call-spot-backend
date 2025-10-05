@@ -43,7 +43,7 @@ class FacebookController {
 
   // GET /facebook/form - Get Facebook forms for a specific page (aligned with Go backend)
   getForms = tryCatchAsync(async (req, res, next) => {
-    const { page_id, access_token } = req.query; // Aligned with Go backend parameter names
+    const { page_id, access_token } = req.body; // Aligned with Go backend parameter names
     const accountId = req.account._id;
 
     if (!page_id || !access_token) {
