@@ -155,9 +155,9 @@ class FacebookService {
   /**
    * Update campaign with Facebook data (aligned with Go backend widget integration)
    */
-  async updateCampaignWithFacebookData(campaignId, facebookData) {
+  async updateCampaignWithFacebookData(campaignId, accountId, facebookData) {
     try {
-      const campaign = await this.campaignRepo.update(campaignId, {
+      const campaign = await this.campaignRepo.updateByIdAndAccount(campaignId, accountId, {
         facebook_data: {
           facebook_page_id: facebookData.facebook_page_id,
           facebook_form_id: facebookData.facebook_form_id,
@@ -175,9 +175,14 @@ class FacebookService {
   /**
    * Get campaigns with Facebook integration (aligned with Go backend)
    */
-  async getCampaignsWithFacebookData(accountId) {
+  async getCampaignsWithFacebookData(accountId,body) {
     try {
-      const campaigns = await this.campaignRepo.findByAccountId(accountId);
+      const { page } = body;
+      let options = {
+         page
+      };
+      const campaigns = await this.campaignRepo.findByAccount(accountId,options);
+      
       
       // Filter campaigns that have Facebook data
       const facebookCampaigns = campaigns.campaigns.filter(campaign => 

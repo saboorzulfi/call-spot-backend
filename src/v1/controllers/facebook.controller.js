@@ -93,7 +93,7 @@ class FacebookController {
       throw new AppError("facebook_page_id, facebook_form_id, and facebook_page_token are required", 400);
     }
 
-    const result = await this.facebookService.updateCampaignWithFacebookData(id, {
+    const result = await this.facebookService.updateCampaignWithFacebookData(id, accountId, {
       facebook_page_id,
       facebook_form_id,
       facebook_page_token
@@ -105,8 +105,8 @@ class FacebookController {
   // GET /facebook/campaigns - Get campaigns with Facebook integration (aligned with Go backend)
   getCampaignsWithFacebookData = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-
-    const result = await this.facebookService.getCampaignsWithFacebookData(accountId);
+    
+    const result = await this.facebookService.getCampaignsWithFacebookData(accountId,req.body);
 
     return AppResponse.success(res, result, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
   });
