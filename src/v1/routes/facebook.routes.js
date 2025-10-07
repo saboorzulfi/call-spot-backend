@@ -15,6 +15,7 @@ router.get("/leads", facebookController.getLeads);
 
 
 router.put("/campaign/:id", facebookController.updateCampaignWithFacebookData); 
+router.delete("/campaign/:id", facebookController.deleteCampaignWithFacebookData);     
 router.get("/campaign/:id", facebookController.getCampaignWithFacebookData);     
 router.post("/campaigns", facebookController.getCampaignsWithFacebookData);     
 

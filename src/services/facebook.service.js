@@ -160,7 +160,9 @@ class FacebookService {
       const campaign = await this.campaignRepo.updateByIdAndAccount(campaignId, accountId, {
         facebook_data: {
           facebook_page_id: facebookData.facebook_page_id,
+          facebook_page_name: facebookData.facebook_page_name,
           facebook_form_id: facebookData.facebook_form_id,
+          facebook_form_name: facebookData.facebook_form_name,
           facebook_page_token: facebookData.facebook_page_token
         }
       });
@@ -222,6 +224,13 @@ class FacebookService {
       console.error('Error deleting Facebook access token:', error);
       throw new Error(`Failed to delete Facebook access token: ${error.message}`);
     }
+  }
+
+  async deleteCampaignWithFacebookData(id, accountId) {
+    const campaign = await this.campaignRepo.updateByIdAndAccount(id, accountId, {
+      facebook_data: null
+    });
+    return campaign;
   }
 }
 

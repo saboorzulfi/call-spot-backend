@@ -137,7 +137,9 @@ const campaignSchema = new mongoose.Schema({
 
   facebook_data: {
     facebook_page_id: { type: String },
+    facebook_page_name: { type: String },
     facebook_form_id: { type: String },
+    facebook_form_name: { type: String },
     facebook_page_token: { type: String }
   },
 

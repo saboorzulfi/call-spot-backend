@@ -86,7 +86,7 @@ class FacebookController {
   // PUT /facebook/campaign/:id - Update campaign with Facebook data (aligned with Go backend)
   updateCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
     const { id } = req.params;
-    const { facebook_page_id, facebook_form_id, facebook_page_token } = req.body;
+    const { facebook_page_id, facebook_form_id, facebook_page_token, facebook_page_name, facebook_form_name } = req.body;
     const accountId = req.account._id;
 
     if (!facebook_page_id || !facebook_form_id || !facebook_page_token) {
@@ -95,12 +95,23 @@ class FacebookController {
 
     const result = await this.facebookService.updateCampaignWithFacebookData(id, accountId, {
       facebook_page_id,
+      facebook_page_name,
       facebook_form_id,
+      facebook_form_name,
       facebook_page_token
     });
 
     return AppResponse.success(res, result, "Campaign updated with Facebook data successfully", statusCode.OK);
   });
+  deleteCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
+    const { id } = req.params;
+    const accountId = req.account._id;
+
+    const result = await this.facebookService.deleteCampaignWithFacebookData(id, accountId);
+
+    return AppResponse.success(res, result, "Campaign deleted with Facebook data successfully", statusCode.OK);
+  }); 
+
 
   // GET /facebook/campaigns - Get campaigns with Facebook integration (aligned with Go backend)
   getCampaignsWithFacebookData = tryCatchAsync(async (req, res, next) => {
@@ -119,6 +130,7 @@ class FacebookController {
 
     return AppResponse.success(res, result, "Campaign with Facebook data retrieved successfully", statusCode.OK);
   });
+
 }
 
 module.exports = FacebookController;
