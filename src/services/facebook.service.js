@@ -201,6 +201,11 @@ class FacebookService {
     }
   }
 
+  async getCampaignWithFacebookData(id, accountId) {
+    const campaign = await this.campaignRepo.findByIdAndAccount(id, accountId);
+    return campaign;
+  } 
+
   /**
    * Delete Facebook access token from account (aligned with Go backend)
    */

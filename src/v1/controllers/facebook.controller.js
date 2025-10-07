@@ -110,6 +110,15 @@ class FacebookController {
 
     return AppResponse.success(res, result, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
   });
+
+  getCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
+    const { id } = req.params;
+    const accountId = req.account._id;
+
+    const result = await this.facebookService.getCampaignWithFacebookData(id, accountId);
+
+    return AppResponse.success(res, result, "Campaign with Facebook data retrieved successfully", statusCode.OK);
+  });
 }
 
 module.exports = FacebookController;
