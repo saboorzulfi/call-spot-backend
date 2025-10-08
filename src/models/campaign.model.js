@@ -37,30 +37,6 @@ const campaignSchema = new mongoose.Schema({
     missed: { type: Number, default: 0 }
   },
 
-  custom_data: {
-    unit_type: { type: String },
-    developer_id: { type: String },
-    project_id: { type: String },
-    lead_source: { type: String },
-    campaign_id: { type: String },
-    email_lead_data: { type: Boolean, default: false },
-    whatsapp_lead_data: { type: Boolean, default: false },
-    email_lead_data_admin: {
-      enabled: { type: Boolean, default: false },
-      emails: { type: String }
-    },
-    whatsApp_to_lead: {
-      answered: {
-        enabled: { type: Boolean, default: false },
-        message: { type: String }
-      },
-      "un-answered": {
-        enabled: { type: Boolean, default: false },
-        message: { type: String }
-      }
-    }
-  },
-
   design: {
     logo: { type: String },
     title_color: { type: String, default: "#ffffff" },
@@ -149,10 +125,10 @@ const campaignSchema = new mongoose.Schema({
   },
 
   custom_fields: {
+    is_active: { type: Boolean, default: false },
     widget_custom_field: [{
       name: { type: String },
-      id: { type: String },
-      default: { type: String }
+      key: { type: String },
     }]
   },
 

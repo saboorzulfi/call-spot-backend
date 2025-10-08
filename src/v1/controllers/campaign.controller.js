@@ -44,7 +44,7 @@ class CampaignController {
       }
     };
 
-    return AppResponse.success(res, responseData,"Campaign created successfully", statusCode.CREATED);
+    return AppResponse.success(res, responseData, "Campaign created successfully", statusCode.CREATED);
   });
 
   // GET /campaigns - Get all campaigns for account
@@ -174,8 +174,8 @@ class CampaignController {
         google_widget_data: campaign.google_widget_data,
         custom_fields: campaign.custom_fields,
         auto_created: campaign.auto_created,
-        created_at: campaign.created_at,
-        updated_at: campaign.updated_at
+        created_at: campaign.createdAt,
+        updated_at: campaign.updatedAt
       }
     };
 
@@ -200,7 +200,9 @@ class CampaignController {
       TiktokAdvertiserId, TiktokFormId, TiktokAccessToken, TiktokRefreshToken,
       FacebookPageId, FacebookFormId, FacebookAccessToken, FacebookRefreshToken,
       GoogleFormId, GoogleAccessToken, GoogleRefreshToken,
-      CustomFieldsJsonString
+      CustomFieldsJsonString,
+      is_custom_field_active,
+      custom_fields
     } = req.body;
 
     // Handle S3 uploaded files
@@ -313,14 +315,13 @@ class CampaignController {
       updateData.google_widget_data.google_refresh_token = GoogleRefreshToken;
     }
 
-    // Update custom fields if provided
-    if (CustomFieldsJsonString) {
-      try {
-        const customFields = JSON.parse(CustomFieldsJsonString);
-        updateData.custom_fields = { widget_custom_field: customFields };
-      } catch (error) {
-        throw new AppError("Invalid custom fields JSON format", 400);
-      }
+    // Update custom fields if provided (supports JSON string or direct array)
+    if (is_custom_field_active || Array.isArray(custom_fields)) {
+
+      if (!updateData.custom_fields) updateData.custom_fields = {};
+      updateData.custom_fields.widget_custom_field = custom_fields;
+      updateData.custom_fields.is_active = (is_custom_field_active === true || is_custom_field_active === 'true') ? true : false;
+
     }
 
     console.log("Final update data:", updateData);
@@ -349,7 +350,7 @@ class CampaignController {
       }
     };
 
-    return AppResponse.success(res,responseData, "Campaign configs updated successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "Campaign configs updated successfully", statusCode.OK);
   });
 
   // POST /campaigns/:id/clone - Clone campaign
@@ -383,7 +384,7 @@ class CampaignController {
       }
     };
 
-    return AppResponse.success(res, responseData,"Campaign cloned successfully", statusCode.CREATED);
+    return AppResponse.success(res, responseData, "Campaign cloned successfully", statusCode.CREATED);
   });
 
   // DELETE /campaigns/:id - Delete campaign
