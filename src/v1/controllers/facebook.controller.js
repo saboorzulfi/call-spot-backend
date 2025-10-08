@@ -3,13 +3,16 @@ const AppError = require("../../utils/app_error.util");
 const statusCode = require("../../utils/status_code.util");
 const tryCatchAsync = require("../../utils/try_catch.util");
 const FacebookService = require("../../services/facebook.service");
-
+const CampaignRepository = require("../repositories/campaign.repository");
+const AccountRepository = require("../repositories/account.repository");
+const { decrypt } = require("../../utils/encryption.util");
 class FacebookController {
   constructor() {
     this.facebookService = new FacebookService();
+    this.campaignRepo = new CampaignRepository();
+    this.accountRepo = new AccountRepository();
   }
 
-  // POST /facebook/access-token - Save Facebook access token (aligned with Go backend)
   saveAccessToken = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
     const facebookTokenResponse = req.body;
@@ -23,16 +26,24 @@ class FacebookController {
     return AppResponse.success(res, result, "Access token retrieved successfully", statusCode.OK);
   });
 
-  // DELETE /facebook/access-token - Delete Facebook access token (aligned with Go backend)
   deleteAccessToken = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
 
-    const result = await this.facebookService.deleteAccessToken(accountId);
+    // const result = await this.facebookService.deleteAccessToken(accountId);
+    const account = await this.accountRepo.update(accountId, {
+      facebook_user_id: null,
+      facebook_access_token: null,
+      facebook_account_data: null
+    });
 
-    return AppResponse.success(res, result, "Facebook access token deleted successfully", statusCode.OK);
+    let responseData = {
+      id: account._id,
+      facebook_data: account.facebook_data
+    };
+
+    return AppResponse.success(res, responseData, "Facebook access token deleted successfully", statusCode.OK);
   });
 
-  // GET /facebook/page - Get Facebook pages (aligned with Go backend)
   getPages = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
 
@@ -41,50 +52,61 @@ class FacebookController {
     return AppResponse.success(res, pages, "Data retrieved successfully", statusCode.OK);
   });
 
-  // GET /facebook/form - Get Facebook forms for a specific page (aligned with Go backend)
   getForms = tryCatchAsync(async (req, res, next) => {
-    const { page_id, access_token } = req.body; // Aligned with Go backend parameter names
+    const { page_id, access_token } = req.body;
     const accountId = req.account._id;
 
     if (!page_id || !access_token) {
       throw new AppError("page_id and access_token are required", 400);
     }
 
-    const forms = await this.facebookService.getForms(accountId, page_id, access_token);
+    const forms = await this.facebookService.getForms(page_id, access_token);
 
     return AppResponse.success(res, forms, "Data retrieved successfully", statusCode.OK);
   });
 
-  // GET /facebook/form-fields - Get fields for a specific form (aligned with Go backend)
   getFormFields = tryCatchAsync(async (req, res, next) => {
-    const { form_id, access_token } = req.query; // Aligned with Go backend parameter names
+    const { form_id, access_token } = req.query;
     const accountId = req.account._id;
 
     if (!form_id || !access_token) {
       throw new AppError("form_id and access_token are required", 400);
     }
 
-    const fields = await this.facebookService.getFormFields(accountId, form_id, access_token);
+    const fields = await this.facebookService.getFormFields(form_id, access_token);
 
     return AppResponse.success(res, fields, "Data retrieved successfully", statusCode.OK);
   });
 
-  // GET /facebook/leads - Get leads from a specific form (aligned with Go backend)
-  getLeads = tryCatchAsync(async (req, res, next) => {
-    const { form_id, access_token } = req.query; // Aligned with Go backend parameter names
+  getFacebookUserData = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
 
-    if (!form_id || !access_token) {
-      throw new AppError("form_id and access_token are required", 400);
-    }
+    const result = await this.facebookService.getFacebookUserData(accountId);
 
-    const leads = await this.facebookService.getLeads(accountId, form_id, access_token);
+    return AppResponse.success(res, result, "Data retrieved successfully", statusCode.OK);
+  });
+
+  getLeads = tryCatchAsync(async (req, res, next) => {
+    const { form_id } = req.query;
+    const accountId = req.account._id;
+
+    if (!form_id)
+      throw new AppError("form_id and access_token are required", 400);
+    console.log("accountIdaccountId", accountId);
+    const account = await this.accountRepo.findById(accountId);
+    if (!account || !account.facebook_access_token)
+      throw new AppError("Account not found or access token not found", 404);
+
+    const access_token = await decrypt(account.facebook_access_token);
+
+    const leads = await this.facebookService.getLeads(form_id, access_token);
 
     return AppResponse.success(res, leads, "Data retrieved successfully", statusCode.OK);
   });
 
-  // PUT /facebook/campaign/:id - Update campaign with Facebook data (aligned with Go backend)
+  // ** Campaigns **
   updateCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
+
     const { id } = req.params;
     const { facebook_page_id, facebook_form_id, facebook_page_token, facebook_page_name, facebook_form_name } = req.body;
     const accountId = req.account._id;
@@ -93,43 +115,80 @@ class FacebookController {
       throw new AppError("facebook_page_id, facebook_form_id, and facebook_page_token are required", 400);
     }
 
-    const result = await this.facebookService.updateCampaignWithFacebookData(id, accountId, {
-      facebook_page_id,
-      facebook_page_name,
-      facebook_form_id,
-      facebook_form_name,
-      facebook_page_token
+    const campaign = await this.campaignRepo.updateByIdAndAccount(id, accountId, {
+      facebook_data: {
+        facebook_page_id: facebook_page_id,
+        facebook_page_name: facebook_page_name,
+        facebook_form_id: facebook_form_id,
+        facebook_form_name: facebook_form_name,
+        facebook_page_token: facebook_page_token
+      }
     });
+    let responseData = {
+      id: campaign._id,
+      facebook_data: campaign.facebook_data
+    };
 
-    return AppResponse.success(res, result, "Campaign updated with Facebook data successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "Campaign updated with Facebook data successfully", statusCode.OK);
   });
+
   deleteCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
+
     const { id } = req.params;
     const accountId = req.account._id;
 
-    const result = await this.facebookService.deleteCampaignWithFacebookData(id, accountId);
+    const campaign = await this.campaignRepo.deleteByIdAndAccount(id, accountId);
 
-    return AppResponse.success(res, result, "Campaign deleted with Facebook data successfully", statusCode.OK);
-  }); 
+    let responseData = {
+      id: campaign._id,
+      facebook_data: campaign.facebook_data
+    };
+
+    return AppResponse.success(res, responseData, "Campaign deleted with Facebook data successfully", statusCode.OK);
+  });
 
 
-  // GET /facebook/campaigns - Get campaigns with Facebook integration (aligned with Go backend)
   getCampaignsWithFacebookData = tryCatchAsync(async (req, res, next) => {
-    const accountId = req.account._id;
-    
-    const result = await this.facebookService.getCampaignsWithFacebookData(accountId,req.body);
 
-    return AppResponse.success(res, result, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
+    const accountId = req.account._id;
+    const { page } = req.body;
+
+    let options = { page };
+
+
+    const campaigns = await this.campaignRepo.findByAccount(accountId, options);
+
+
+    const facebookCampaigns = campaigns.campaigns.filter(campaign =>
+      campaign.facebook_data &&
+      campaign.facebook_data.facebook_page_id &&
+      campaign.facebook_data.facebook_form_id
+    );
+
+    let responseData = {
+      campaigns: facebookCampaigns,
+      pagination: campaigns.pagination
+    };
+
+    return AppResponse.success(res, responseData, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
   });
 
   getCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
     const { id } = req.params;
     const accountId = req.account._id;
 
-    const result = await this.facebookService.getCampaignWithFacebookData(id, accountId);
+    const campaign = await this.campaignRepo.findByIdAndAccount(id, accountId);
 
-    return AppResponse.success(res, result, "Campaign with Facebook data retrieved successfully", statusCode.OK);
+
+    let responseData = {
+      id: campaign._id,
+      facebook_data: campaign.facebook_data
+    };
+
+    return AppResponse.success(res, responseData, "Campaign with Facebook data retrieved successfully", statusCode.OK);
   });
+
+
 
 }
 

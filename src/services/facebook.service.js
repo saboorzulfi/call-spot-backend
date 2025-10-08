@@ -2,6 +2,7 @@ const axios = require('axios');
 const AccountRepository = require('../v1/repositories/account.repository');
 const CampaignRepository = require('../v1/repositories/campaign.repository');
 const { encrypt, decrypt } = require('../utils/encryption.util');
+const { maskEmail } = require('../utils/emailMask.util');
 
 class FacebookService {
   constructor() {
@@ -10,9 +11,6 @@ class FacebookService {
     this.baseURL = 'https://graph.facebook.com/v21.0';
   }
 
-  /**
-   * Exchange short-lived token for long-lived token
-   */
   async getLongLivedToken(accessToken) {
     try {
       const url = `${this.baseURL}/oauth/access_token?client_id=${process.env.FACEBOOK_APP_ID}&client_secret=${process.env.FACEBOOK_APP_SECRET}&grant_type=fb_exchange_token&fb_exchange_token=${accessToken}`;
@@ -30,9 +28,6 @@ class FacebookService {
     }
   }
 
-  /**
-   * Save Facebook access token to account (aligned with Go backend)
-   */
   async saveAccessToken(accountId, facebookTokenResponse) {
     try {
       // Exchange for long-lived token (like Go backend)
@@ -58,9 +53,6 @@ class FacebookService {
     }
   }
 
-  /**
-   * Get Facebook pages for authenticated user (aligned with Go backend - no database storage)
-   */
   async getPages(accountId) {
     try {
       // Get user account with Facebook credentials
@@ -93,10 +85,7 @@ class FacebookService {
     }
   }
 
-  /**
-   * Get Facebook forms for a specific page (aligned with Go backend - no database storage)
-   */
-  async getForms(accountId, pageId, pageToken) {
+  async getForms(pageId, pageToken) {
     try {
       const url = `${this.baseURL}/${pageId}/leadgen_forms?limit=250`;
       const response = await axios.get(url, {
@@ -105,7 +94,6 @@ class FacebookService {
         }
       });
 
-      // Return Facebook response directly (like Go backend - no database storage)
       return response.data;
     } catch (error) {
       console.error('Error fetching Facebook forms:', error);
@@ -113,10 +101,7 @@ class FacebookService {
     }
   }
 
-  /**
-   * Get form fields for a specific form (aligned with Go backend)
-   */
-  async getFormFields(accountId, formId, pageToken) {
+  async getFormFields(formId, pageToken) {
     try {
       const url = `${this.baseURL}/${formId}?fields=questions`;
       const response = await axios.get(url, {
@@ -132,19 +117,15 @@ class FacebookService {
     }
   }
 
-  /**
-   * Get leads from a specific form (aligned with Go backend - no database storage)
-   */
-  async getLeads(accountId, formId, pageToken) {
+  async getLeads(formId, accessToken) {
     try {
       const url = `${this.baseURL}/${formId}/leads?fields=created_time,id,field_data,campaign_id,campaign_name,adset_id,adset_name,ad_name,ad_id`;
       const response = await axios.get(url, {
         headers: {
-          'Authorization': `Bearer ${pageToken}`
+          'Authorization': `Bearer ${accessToken}`
         }
       });
 
-      // Return Facebook response directly (like Go backend - no database storage)
       return response.data;
     } catch (error) {
       console.error('Error fetching Facebook leads:', error);
@@ -152,86 +133,35 @@ class FacebookService {
     }
   }
 
-  /**
-   * Update campaign with Facebook data (aligned with Go backend widget integration)
-   */
-  async updateCampaignWithFacebookData(campaignId, accountId, facebookData) {
+  async getFacebookUserData(accountId) {
     try {
-      const campaign = await this.campaignRepo.updateByIdAndAccount(campaignId, accountId, {
-        facebook_data: {
-          facebook_page_id: facebookData.facebook_page_id,
-          facebook_page_name: facebookData.facebook_page_name,
-          facebook_form_id: facebookData.facebook_form_id,
-          facebook_form_name: facebookData.facebook_form_name,
-          facebook_page_token: facebookData.facebook_page_token
-        }
-      });
 
-      return campaign;
+      const user = await this.accountRepo.findById(accountId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (!user.facebook_access_token) {
+        return null; 
+      }
+
+      const facebookAccessToken = await decrypt(user.facebook_access_token);
+
+      const url = `${this.baseURL}/me?fields=id,name,email&access_token=${facebookAccessToken}`;
+      const response = await axios.get(url);
+
+
+      if (response.data.email) {
+        response.data.email = maskEmail(response.data.email);
+      }
+
+      return response.data;
     } catch (error) {
-      console.error('Error updating campaign with Facebook data:', error);
-      throw new Error(`Failed to update campaign with Facebook data: ${error.message}`);
+      console.error('Error fetching Facebook user data:', error);
+      throw new Error(`Failed to fetch Facebook user data: ${error.message}`);
     }
   }
 
-  /**
-   * Get campaigns with Facebook integration (aligned with Go backend)
-   */
-  async getCampaignsWithFacebookData(accountId,body) {
-    try {
-      const { page } = body;
-      let options = {
-         page
-      };
-      const campaigns = await this.campaignRepo.findByAccount(accountId,options);
-      
-      
-      // Filter campaigns that have Facebook data
-      const facebookCampaigns = campaigns.campaigns.filter(campaign => 
-        campaign.facebook_data && 
-        campaign.facebook_data.facebook_page_id && 
-        campaign.facebook_data.facebook_form_id
-      );
-
-      return {
-        campaigns: facebookCampaigns,
-        pagination: campaigns.pagination
-      };
-    } catch (error) {
-      console.error('Error fetching campaigns with Facebook data:', error);
-      throw new Error(`Failed to fetch campaigns with Facebook data: ${error.message}`);
-    }
-  }
-
-  async getCampaignWithFacebookData(id, accountId) {
-    const campaign = await this.campaignRepo.findByIdAndAccount(id, accountId);
-    return campaign;
-  } 
-
-  /**
-   * Delete Facebook access token from account (aligned with Go backend)
-   */
-  async deleteAccessToken(accountId) {
-    try {
-      const account = await this.accountRepo.update(accountId, {
-        facebook_user_id: null,
-        facebook_access_token: null,
-        facebook_account_data: null
-      });
-
-      return account;
-    } catch (error) {
-      console.error('Error deleting Facebook access token:', error);
-      throw new Error(`Failed to delete Facebook access token: ${error.message}`);
-    }
-  }
-
-  async deleteCampaignWithFacebookData(id, accountId) {
-    const campaign = await this.campaignRepo.updateByIdAndAccount(id, accountId, {
-      facebook_data: null
-    });
-    return campaign;
-  }
 }
 
 module.exports = FacebookService;
