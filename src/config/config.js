@@ -7,7 +7,7 @@ const config = {
   },
   
   database: {
-    uri: process.env.MONGODB_URI || `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@${process.env.MONGO_HOST}/${process.env.MONGO_DBNAME}?retryWrites=true&w=majority`,
+    uri:  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@${process.env.MONGO_HOST}/${process.env.MONGO_DBNAME}?retryWrites=true&w=majority`,
 
     options: {
     }
@@ -52,6 +52,7 @@ const config = {
 
   // FreeSWITCH ESL Configuration
   esl: {
+    enabled: process.env.FREESWITCH_ENABLED !== 'false', // Default to true, set to 'false' to disable
     host: process.env.ESL_HOST || '127.0.0.1',
     port: parseInt(process.env.ESL_PORT) || 8021,
     password: process.env.ESL_PASSWORD || 'ClueCon',

@@ -28,11 +28,19 @@ class FreeSwitchService {
         return new Promise((resolve, reject) => {
             console.log(`🔌 Connecting to FreeSWITCH at ${this.config.host}:${this.config.port}`);
             
+            // Set a timeout for connection attempts
+            const timeout = setTimeout(() => {
+                console.error("❌ FreeSWITCH connection timeout (10 seconds)");
+                this.isConnected = false;
+                reject(new Error("Connection timeout"));
+            }, 10000);
+            
             this.connection = new ESL.Connection(
                 this.config.host, 
                 this.config.port, 
                 this.config.password, 
                 () => {
+                    clearTimeout(timeout);
                     console.log("✅ Connected to FreeSWITCH ESL");
                     this.isConnected = true;
                     this.setupEventListeners();
@@ -41,12 +49,14 @@ class FreeSwitchService {
             );
 
             this.connection.on('esl::error', (error) => {
+                clearTimeout(timeout);
                 console.error("❌ ESL Connection Error:", error);
                 this.isConnected = false;
                 reject(error);
             });
 
             this.connection.on('esl::end', () => {
+                clearTimeout(timeout);
                 console.log("🔌 ESL Connection ended");
                 this.isConnected = false;
             });

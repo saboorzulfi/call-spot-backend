@@ -19,12 +19,17 @@ class Server {
       await new Database().connect();
       console.log("✅ Database connected successfully");
 
-      // Initialize FreeSWITCH service
-      console.log("🔌 Initializing FreeSWITCH service...");
-      this.fsService = new FreeSwitchService();
-      await this.initializeFreeSwitch();
+      // Initialize FreeSWITCH service (optional)
+      if (config.esl.enabled) {
+        console.log("🔌 Initializing FreeSWITCH service...");
+        this.fsService = new FreeSwitchService();
+        await this.initializeFreeSwitch();
+      } else {
+        console.log("⚠️ FreeSWITCH is disabled in configuration");
+        this.fsService = null;
+      }
 
-      // Make FreeSWITCH service globally accessible
+      // Make FreeSWITCH service globally accessible (even if not connected)
       global.fsService = this.fsService;
 
       // Backend services initialized
@@ -33,9 +38,16 @@ class Server {
       // Start the server
       this.app.getApp().listen(this.port, () => {
         console.log(`🚀 Server running on port ${this.port}`);
-        console.log(`📊 FreeSWITCH Status: ${this.fsService.isConnectedToFreeSwitch() ? 'Connected' : 'Disconnected'}`);
-        console.log(`🔌 ESL Connection: ${this.fsService.isConnectedToFreeSwitch() ? 'Established' : 'Not Available'}`);
-        console.log(`📋 Services: Database ✅ | FreeSWITCH ${this.fsService.isConnectedToFreeSwitch() ? '✅' : '❌'} | Call Queue (On-Demand)`);
+        
+        if (this.fsService) {
+          console.log(`📊 FreeSWITCH Status: ${this.fsService.isConnectedToFreeSwitch() ? 'Connected' : 'Disconnected'}`);
+          console.log(`🔌 ESL Connection: ${this.fsService.isConnectedToFreeSwitch() ? 'Established' : 'Not Available'}`);
+          console.log(`📋 Services: Database ✅ | FreeSWITCH ${this.fsService.isConnectedToFreeSwitch() ? '✅' : '❌'} | Call Queue (On-Demand)`);
+        } else {
+          console.log(`📊 FreeSWITCH Status: Disabled`);
+          console.log(`🔌 ESL Connection: Not Available`);
+          console.log(`📋 Services: Database ✅ | FreeSWITCH ❌ (Disabled) | Call Queue (On-Demand)`);
+        }
       });
 
       // Graceful shutdown
@@ -59,9 +71,10 @@ class Server {
     } catch (error) {
       console.error("❌ Failed to connect to FreeSWITCH:", error.message);
       console.log("⚠️ Server will continue without FreeSWITCH (calls will be disabled)");
+      console.log("💡 To enable calls, please install and configure FreeSWITCH");
       
-      // Setup retry mechanism
-      this.setupFreeSwitchRetry();
+      // Don't setup retry mechanism to avoid continuous errors
+      // this.setupFreeSwitchRetry();
     }
   }
 
@@ -107,6 +120,10 @@ class Server {
         console.log("🔌 Disconnecting from FreeSWITCH...");
         await this.fsService.disconnect();
         console.log("✅ FreeSWITCH disconnected");
+      } else if (this.fsService) {
+        console.log("🔌 FreeSWITCH service was not connected");
+      } else {
+        console.log("🔌 FreeSWITCH service was disabled");
       }
       
       // Disconnect database
