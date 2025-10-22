@@ -74,7 +74,6 @@ const callSchema = new mongoose.Schema({
       enum: ["un-answered", "scheduled", "answered", "missed", "in-progress", "missed by agent(s)"],
       default: "scheduled"
     },
-
   }],
 
 
@@ -155,7 +154,7 @@ const callSchema = new mongoose.Schema({
     }
   }],
 
-  ringing_agent: {
+  ringing_agent: [{
     id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Agent"
@@ -165,7 +164,7 @@ const callSchema = new mongoose.Schema({
       enum: ["un-answered", "scheduled", "answered", "missed", "in-progress", "missed by agent(s)"],
       default: "scheduled"
     }
-  },
+  }],
 
   conversational_id: {
     type: String,

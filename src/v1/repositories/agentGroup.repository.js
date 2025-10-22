@@ -34,6 +34,22 @@ class AgentGroupRepository {
     }
   }
 
+  async findByIds(ids) {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return [];
+      }
+      
+      const agentGroups = await AgentGroup.find({
+        _id: { $in: ids }
+      });
+      
+      return agentGroups;
+    } catch (error) {
+      throw new AppError("Unable to retrieve agent groups by IDs", 500);
+    }
+  }
+
   async findByAccount(accountId, options = {}) {
     try {
       const { page = 1, limit = 10, sortBy = "created_at", sortOrder = "desc" ,populate = [] ,search} = options;

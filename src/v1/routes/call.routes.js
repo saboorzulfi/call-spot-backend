@@ -16,6 +16,7 @@ router.delete("/:id", callController.delete);                 // DELETE /calls/:
 
 // Start call flow
 router.post("/start", callController.start);                 // POST /call/start
+                          // GET /call/active
 
 // Import call endpoint (equivalent to Go backend /import-call)
 router.post("/import-call", uploadExcel.single('file'), callController.importCall);  // POST /import-call

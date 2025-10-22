@@ -1,5 +1,6 @@
 const CallRepository = require("../repositories/call.repository");
 const LeadRepository = require("../repositories/lead.repository");
+const CallQueueService = require("../../services/call-queue.service");
 const AppResponse = require("../../utils/response.util");
 const AppError = require("../../utils/app_error.util");
 const statusCode = require("../../utils/status_code.util");
@@ -11,24 +12,52 @@ class CallController {
   constructor() {
     this.callRepo = new CallRepository();
     this.leadRepo = new LeadRepository();
+    // Call queue service will be created on-demand
   }
 
-  // POST /call/start - Initiate a call flow (placeholder)
+  // Get or create call queue service
+  getCallQueueService() {
+    if (!global.callQueueService) {
+      const fsService = global.fsService;
+      if (!fsService) {
+        throw new AppError("FreeSWITCH service is not available", 503);
+      }
+      global.callQueueService = new CallQueueService(fsService);
+      console.log("📞 Call Queue service created on-demand");
+    }
+    return global.callQueueService;
+  }
+
+  // POST /call/start - Start calling for existing call document
   start = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-    const { lead_number, widget_id } = req.body;
+    const { call_id } = req.body;
 
-    if (!lead_number) {
-      throw new AppError("lead_id is required", 400);
+    // Validation
+    if (!call_id) {
+      throw new AppError("Call ID is required", 400);
     }
 
-    // TODO: Implement call initiation logic
-    return AppResponse.success(res, {
-      message: "Call initiation placeholder",
-      lead_id: lead_id,
-      widget_id,
-      account_id: accountId
-    }, "Call initiation accepted", statusCode.ACCEPTED || 202);
+    // Get call queue service (creates on-demand if needed)
+    const callQueueService = this.getCallQueueService();
+
+    // Find call document by ID
+    const call = await this.callRepo.findById(call_id);
+    
+    // Verify call belongs to account
+    if (call.account_id.toString() !== accountId.toString()) {
+      throw new AppError("Access denied", 403);
+    }
+
+    // Check if call is already in progress
+    if (call.call_status.call_state === "in-progress" || call.call_status.call_state === "answered") {
+      throw new AppError("Call is already in progress", 400);
+    }
+
+    // Start calling for this call document
+    const result = await callQueueService.startCallingForCall(call);
+
+    return AppResponse.success(res, result, "Call initiated successfully", statusCode.ACCEPTED);
   });
 
   // POST /calls/import-call - Import calls from Excel
@@ -265,6 +294,43 @@ class CallController {
     await this.callRepo.deleteByIdAndAccount(id, accountId);
 
     return AppResponse.success(res, {}, "Call deleted successfully", statusCode.OK);
+  });
+
+  // GET /call/health - Get call service health status
+  getHealth = tryCatchAsync(async (req, res, next) => {
+    const fsService = global.fsService;
+    
+    const healthStatus = {
+      service: "Call Service",
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      freeswitch: {
+        connected: fsService ? fsService.isConnectedToFreeSwitch() : false,
+        status: fsService && fsService.isConnectedToFreeSwitch() ? "connected" : "disconnected"
+      },
+      call_queue: {
+        initialized: !!global.callQueueService,
+        status: global.callQueueService ? "active" : "not_initialized"
+      },
+      features: {
+        call_initiation: true,
+        agent_selection: true,
+        call_bridging: fsService ? fsService.isConnectedToFreeSwitch() : false,
+        status_tracking: true,
+        agent_conflict_prevention: true,
+        on_demand_service: true
+      }
+    };
+
+    // If call queue service is initialized, get its health status
+    if (global.callQueueService) {
+      healthStatus.call_queue = {
+        ...healthStatus.call_queue,
+        ...global.callQueueService.getHealthStatus()
+      };
+    }
+
+    return AppResponse.success(res, healthStatus, "Call service health status", statusCode.OK);
   });
 }
 

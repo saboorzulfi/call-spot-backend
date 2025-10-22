@@ -35,6 +35,23 @@ class AgentRepository {
     }
   }
 
+  async findByIds(ids) {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return [];
+      }
+      
+      const agents = await Agent.find({
+        _id: { $in: ids },
+        deleted_at: null
+      });
+      
+      return agents;
+    } catch (error) {
+      throw new AppError("Unable to retrieve agents by IDs", 500);
+    }
+  }
+
   async findByPhoneNumber(phoneNumber) {
     try {
       return await Agent.findByPhoneNumber(phoneNumber);
