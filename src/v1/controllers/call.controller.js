@@ -1,6 +1,6 @@
 const CallRepository = require("../repositories/call.repository");
 const LeadRepository = require("../repositories/lead.repository");
-const CallQueueService = require("../../services/call-queue.service");
+const UltraSimpleCallService = require("../../services/ultra-simple-call.service");
 const AppResponse = require("../../utils/response.util");
 const AppError = require("../../utils/app_error.util");
 const statusCode = require("../../utils/status_code.util");
@@ -15,17 +15,17 @@ class CallController {
     // Call queue service will be created on-demand
   }
 
-  // Get or create call queue service
+  // Get or create ultra simple call service
   getCallQueueService() {
-    if (!global.callQueueService) {
+    if (!global.ultraSimpleCallService) {
       const fsService = global.fsService;
       if (!fsService) {
         throw new AppError("FreeSWITCH service is not available", 503);
       }
-      global.callQueueService = new CallQueueService(fsService);
-      console.log("📞 Call Queue service created on-demand");
+      global.ultraSimpleCallService = new UltraSimpleCallService(fsService);
+      console.log("📞 Ultra Simple Call service created on-demand");
     }
-    return global.callQueueService;
+    return global.ultraSimpleCallService;
   }
 
   // POST /call/start - Start calling for existing call document
@@ -309,8 +309,9 @@ class CallController {
         status: fsService && fsService.isConnectedToFreeSwitch() ? "connected" : "disconnected"
       },
       call_queue: {
-        initialized: !!global.callQueueService,
-        status: global.callQueueService ? "active" : "not_initialized"
+        initialized: !!global.ultraSimpleCallService,
+        status: global.ultraSimpleCallService ? "active" : "not_initialized",
+        type: "ultra-simple"
       },
       features: {
         call_initiation: true,
@@ -322,16 +323,17 @@ class CallController {
       }
     };
 
-    // If call queue service is initialized, get its health status
-    if (global.callQueueService) {
+    // If ultra simple call service is initialized, get its health status
+    if (global.ultraSimpleCallService) {
       healthStatus.call_queue = {
         ...healthStatus.call_queue,
-        ...global.callQueueService.getHealthStatus()
+        service_type: "ultra-simple"
       };
     }
 
     return AppResponse.success(res, healthStatus, "Call service health status", statusCode.OK);
   });
+
 }
 
 module.exports = CallController;
