@@ -30,6 +30,11 @@ const agentSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  status: {
+    type: String,
+    enum: ["free", "in-progress"],
+    default: "free"
+  },
   is_multi_calls_allowed: {
     type: Boolean,
     default: false

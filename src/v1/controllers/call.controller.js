@@ -58,6 +58,11 @@ class CallController {
     if (call.call_status.call_state === "answered" && !call.call_details?.end_time) {
       throw new AppError("Call is still active", 400);
     }
+    
+    // Allow new calls if previous call is completed
+    if (call.call_status.call_state === "completed") {
+      // Previous call is completed, allow new call
+    }
 
     // Start calling for this call document
     const result = await callQueueService.startCallingForCall(call);

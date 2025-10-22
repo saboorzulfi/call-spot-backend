@@ -20,7 +20,7 @@ const callSchema = new mongoose.Schema({
   call_status: {
     call_state: {
       type: String,
-      enum: ["scheduled", "in-progress", "answered", "un-answered", "missed", "missed by agent(s)"],
+      enum: ["scheduled", "in-progress", "answered", "un-answered", "missed", "missed by agent(s)", "completed"],
       default: "scheduled"
     },
     description: {
@@ -71,8 +71,8 @@ const callSchema = new mongoose.Schema({
     },
     last_call_status: {
       type: String,
-      enum: ["un-answered", "scheduled", "answered", "missed", "in-progress", "missed by agent(s)"],
-      default: "scheduled"
+      enum: ["free", "in-progress", "answered", "missed", "un-answered"],
+      default: "free"
     },
   }],
 
