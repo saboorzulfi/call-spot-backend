@@ -12,11 +12,9 @@ class JWTService {
   // Generate access token (matching Go backend)
   generateAccessToken(payload) {
     try {
+      console.log("🔑 Payload:", payload,this.secret, config.jwt.expiry);
       const token = jwt.sign(payload, this.secret, {
         expiresIn: config.jwt.expiry,
-        issuer: this.issuer,
-        audience: this.audience,
-        algorithm: "HS256",
       });
       return token;
     } catch (error) {

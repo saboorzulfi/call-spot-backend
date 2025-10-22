@@ -7,14 +7,14 @@ const tryCatchAsync = require("../../utils/try_catch.util");
 // Comprehensive authentication middleware - verifies JWT and fetches account data
 const isLoggedIn = tryCatchAsync(async (req, res, next) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
-  
+  console.log("🔑 Token:", token);
   if (!token) {
     throw new AppError("No token provided", 401);
   }
 
   // Verify JWT token
   const decoded = jwt.verify(token, config.jwt.secret);
-  
+  console.log("🔑 Decoded:", decoded);
   if (!decoded || !decoded.account_id) {
     throw new AppError("Invalid token payload", 401);
   }
