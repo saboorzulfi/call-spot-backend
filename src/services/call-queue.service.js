@@ -52,19 +52,6 @@ class CallQueueService {
 
     async startCallingForCall(call) {
         try {
-            // DEBUG: Log ALL call initiation attempts
-            console.log("🚨 CALL INITIATION ATTEMPT (startCallingForCall):");
-            console.log("   Call ID:", call._id);
-            console.log("   Account ID:", call.account_id);
-            console.log("   Campaign ID:", call.campaign_id);
-            console.log("   Lead Data:", call.lead_data);
-            console.log("   Timestamp:", new Date().toISOString());
-            console.log("   Stack Trace:", new Error().stack);
-
-            // TEMPORARY: Disable automatic call processing
-            console.log("🚫 Call processing temporarily disabled");
-            throw new AppError("Call processing is temporarily disabled", 503);
-            
             // Check if FreeSWITCH service is available
             if (!this.fsService || !this.fsService.isConnectedToFreeSwitch()) {
                 throw new AppError("FreeSWITCH service is not available", 503);
@@ -108,13 +95,6 @@ class CallQueueService {
     }
 
     async startCall(accountId, callData) {
-        // DEBUG: Log who is creating new calls
-        console.log("🚨 NEW CALL CREATION ATTEMPT:");
-        console.log("   Account ID:", accountId);
-        console.log("   Call Data:", JSON.stringify(callData, null, 2));
-        console.log("   Timestamp:", new Date().toISOString());
-        console.log("   Stack Trace:", new Error().stack);
-
         const { lead_number, lead_name, widget_id, site_url, lead_data } = callData;
 
         if (!lead_number) {
