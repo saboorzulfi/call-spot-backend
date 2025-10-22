@@ -1,4 +1,4 @@
-import ESL from "modesl";
+const ESL = require("modesl");
 
 class FreeSwitchService {
     constructor() {
@@ -322,4 +322,4 @@ class FreeSwitchService {
     }
 }
 
-export default FreeSwitchService;
+module.exports = FreeSwitchService;
