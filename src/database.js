@@ -4,6 +4,7 @@ const config = require("./config/config");
 class Database {
   async connect() {
     try {
+      console.log("--------------------------------  conne "+ config.database.uri);
       await mongoose.connect(config.database.uri, config.database.options);
       console.log(`MongoDB connected successfully`);
       

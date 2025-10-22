@@ -33,6 +33,14 @@ class CallController {
     const accountId = req.account._id;
     const { call_id } = req.body;
 
+    // DEBUG: Log who is initiating calls
+    console.log("🚨 CALL INITIATION ATTEMPT:");
+    console.log("   Account ID:", accountId);
+    console.log("   Call ID:", call_id);
+    console.log("   User Agent:", req.get('User-Agent'));
+    console.log("   IP Address:", req.ip);
+    console.log("   Timestamp:", new Date().toISOString());
+
     // Validation
     if (!call_id) {
       throw new AppError("Call ID is required", 400);

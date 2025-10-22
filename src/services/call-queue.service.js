@@ -52,6 +52,10 @@ class CallQueueService {
 
     async startCallingForCall(call) {
         try {
+            // TEMPORARY: Disable automatic call processing
+            console.log("🚫 Call processing temporarily disabled");
+            throw new AppError("Call processing is temporarily disabled", 503);
+            
             // Check if FreeSWITCH service is available
             if (!this.fsService || !this.fsService.isConnectedToFreeSwitch()) {
                 throw new AppError("FreeSWITCH service is not available", 503);
