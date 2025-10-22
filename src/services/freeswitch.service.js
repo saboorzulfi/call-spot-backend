@@ -1,4 +1,5 @@
 const ESL = require("modesl");
+const config = require("../config/config");
 
 class FreeSwitchService {
     constructor() {
@@ -7,13 +8,16 @@ class FreeSwitchService {
         this.activeCalls = new Map();
         this.eventListeners = new Map();
         
-        // Configuration
+        // Configuration - Use main config file
         this.config = {
-            host: process.env.FS_HOST || "127.0.0.1",
-            port: parseInt(process.env.FS_PORT || "8021"),
-            password: process.env.FS_PASSWORD || "ClueCon",
-            gateway: process.env.FS_GATEWAY || "external::didlogic",
-            didNumber: process.env.FS_DID_NUMBER || "442039960029"
+            host: config.esl.host,
+            port: config.esl.port,
+            password: config.esl.password,
+            gateway: "external::didlogic", // Your working gateway format
+            didNumber: config.dialer.didNumber,
+            agentPrefix: config.dialer.agentPrefix,
+            leadPrefix: config.dialer.leadPrefix,
+            siptrunk: config.siptrunk
         };
     }
 
@@ -89,7 +93,7 @@ class FreeSwitchService {
             this.notifyListeners('channel_bridge', { uuid, otherUuid });
         });
 
-        connection.on("esl::event::CHANNEL_HANGUP_COMPLETE::*", (evt) => {
+        this.connection.on("esl::event::CHANNEL_HANGUP_COMPLETE::*", (evt) => {
             const uuid = evt.getHeader("Unique-ID");
             const cause = evt.getHeader("Hangup-Cause");
             const callId = evt.getHeader("Call-ID");
@@ -127,8 +131,8 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Build originate command for agent
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false,call_id=${callId}}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
+        // Use your exact working command format
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
         console.log("🧾 Agent Command:", agentCmd);
 
         const result = await this.api(agentCmd);
@@ -177,8 +181,8 @@ class FreeSwitchService {
         
         console.log(`📞 Dialing lead and bridging: ${leadNumber}`);
         
-        // Use originate with bridge
-        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30,call_id=${callId}}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(sofia/gateway/${this.config.gateway}/${agentUuid})`;
+        // Use your exact working bridge command format
+        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(sofia/gateway/${this.config.gateway}/${agentUuid})`;
         console.log("🧾 Bridge Command:", bridgeCmd);
         
         const res = await this.api(bridgeCmd);
@@ -199,8 +203,8 @@ class FreeSwitchService {
         
         console.log(`📞 Dialing lead separately: ${leadNumber}`);
         
-        // Originate lead with park
-        const leadCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=false,originate_timeout=30,call_id=${callId}}sofia/gateway/${this.config.gateway}/${leadNumber} &park()`;
+        // Use your exact working lead command format
+        const leadCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=false,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &park()`;
         console.log("🧾 Lead Command:", leadCmd);
         
         const res = await this.api(leadCmd);
@@ -309,6 +313,56 @@ class FreeSwitchService {
      */
     isConnectedToFreeSwitch() {
         return this.isConnected;
+    }
+
+    /**
+     * Your working call flow implementation
+     */
+    async startCallFlow(agentNumber, leadNumber) {
+        try {
+            console.log("🚀 Starting Call Flow (Your Working Version)");
+            console.log("==========================================");
+            console.log(`Agent: ${agentNumber}`);
+            console.log(`Lead: ${leadNumber}`);
+            console.log(`Gateway: ${this.config.gateway}`);
+            console.log("");
+
+            // Method 1: Try direct bridge approach (your working method)
+            console.log("🔄 Trying Method 1: Direct Bridge Approach");
+            const success = await this.callLeadAndBridge(null, leadNumber, "working_call");
+            
+            if (success) {
+                console.log("✅ Method 1 successful!");
+                return { success: true, method: "direct_bridge" };
+            }
+
+            console.log("❌ Method 1 failed, trying Method 2...");
+
+            // Method 2: Separate calls then bridge (your backup method)
+            console.log("🔄 Trying Method 2: Separate Calls + Bridge");
+            
+            // Start agent call
+            const agentUuid = await this.startAgentCall(agentNumber, "working_call");
+            if (!agentUuid) {
+                console.log("❌ Failed to start agent call");
+                return { success: false, error: "Failed to start agent call" };
+            }
+
+            // Wait for agent to answer
+            const agentAnswered = await this.waitForAgentAnswer(agentUuid, 60000);
+            if (agentAnswered) {
+                console.log("✅ Agent answered! Dialing lead...");
+                const leadUuid = await this.callLeadSeparate(agentUuid, leadNumber, "working_call");
+                return { success: true, method: "separate_bridge", agentUuid, leadUuid };
+            } else {
+                console.log("❌ Agent did not answer");
+                return { success: false, error: "Agent did not answer" };
+            }
+
+        } catch (error) {
+            console.error("❌ Call flow failed:", error);
+            return { success: false, error: error.message };
+        }
     }
 
     /**
