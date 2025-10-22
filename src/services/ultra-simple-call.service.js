@@ -47,6 +47,19 @@ class UltraSimpleCallService {
         try {
             console.log(`🚀 Starting call: ${call._id}`);
             
+            // Store call info for hangup handling (even if call fails early)
+            this.activeCalls.set(call._id.toString(), {
+                call_id: call._id,
+                callRecord: call,
+                account_id: call.account_id,
+                agent_uuid: null,
+                lead_uuid: null,
+                agent_id: null,
+                agent_name: null,
+                lead_number: null,
+                start_time: new Date()
+            });
+            
             // Step 1: Find campaign
             const campaign = await this.campaignRepo.findById(call.campaign_id);
             if (!campaign) {
@@ -129,16 +142,15 @@ class UltraSimpleCallService {
             console.log(`🎉 Call connected! Agent and lead are talking`);
             await this.updateCallStatus(call._id, call.account_id, "answered", "Call connected successfully");
             
-            // Store active call info for hangup handling
-            this.activeCalls.set(call._id.toString(), {
-                call_id: call._id,
-                agent_uuid: agentUuid,
-                lead_uuid: leadUuid,
-                agent_id: agent._id,
-                agent_name: agent.full_name,
-                lead_number: leadNumber,
-                start_time: new Date()
-            });
+            // Update active call info with successful connection details
+            const existingCallInfo = this.activeCalls.get(call._id.toString());
+            if (existingCallInfo) {
+                existingCallInfo.agent_uuid = agentUuid;
+                existingCallInfo.lead_uuid = leadUuid;
+                existingCallInfo.agent_id = agent._id;
+                existingCallInfo.agent_name = agent.full_name;
+                existingCallInfo.lead_number = leadNumber;
+            }
 
             return { success: true };
 
@@ -159,10 +171,8 @@ class UltraSimpleCallService {
         console.log(`📴 Call completed: ${cause}`);
 
         // Mark call as completed
-        // Note: This method needs accountId, but we need to get it from the call record
-        // For now, we'll skip this update or get accountId from activeCalls
-        if (callInfo) {
-            await this.updateCallStatus(callId, callInfo.callRecord.account_id, "answered", `Call completed - ${cause}`);
+        if (callInfo && callInfo.account_id) {
+            await this.updateCallStatus(callId, callInfo.account_id, "answered", `Call completed - ${cause}`);
         }
         
         // Update call details with end time
