@@ -49,9 +49,14 @@ class CallController {
       throw new AppError("Access denied", 403);
     }
 
-    // Check if call is already in progress
-    if (call.call_status.call_state === "in-progress" || call.call_status.call_state === "answered") {
+    // Check if call is already in progress (only block if truly active)
+    if (call.call_status.call_state === "in-progress") {
       throw new AppError("Call is already in progress", 400);
+    }
+    
+    // If call is "answered" but has an end time, it's completed and we can start a new one
+    if (call.call_status.call_state === "answered" && !call.call_details?.end_time) {
+      throw new AppError("Call is still active", 400);
     }
 
     // Start calling for this call document

@@ -170,7 +170,7 @@ class UltraSimpleCallService {
 
         console.log(`📴 Call completed: ${cause}`);
 
-        // Mark call as completed
+        // Mark call as completed (using 'answered' status but with completion description)
         if (callInfo && callInfo.account_id) {
             await this.updateCallStatus(callId, callInfo.account_id, "answered", `Call completed - ${cause}`);
         }
@@ -211,11 +211,13 @@ class UltraSimpleCallService {
         // If no specific agents, get all active agents for the account
         if (agents.length === 0) {
             const result = await this.agentRepo.findByAccount(campaign.account_id, { status: "active" });
-            agents = result.agents;
+            agents = result?.agents || []; // Handle null/undefined result
         }
 
         // Filter available agents (active and not currently on calls)
         const availableAgents = agents.filter(agent => {
+            if (!agent || !agent._id) return false; // Skip null/undefined agents
+            
             const isActive = agent.is_active && agent.personal_phone;
             const isNotBusy = !this.isAgentOnCall(agent._id.toString());
             return isActive && isNotBusy;
@@ -229,7 +231,7 @@ class UltraSimpleCallService {
      */
     isAgentOnCall(agentId) {
         for (const [callId, callInfo] of this.activeCalls) {
-            if (callInfo.agent_id.toString() === agentId) {
+            if (callInfo.agent_id && callInfo.agent_id.toString() === agentId.toString()) {
                 return true;
             }
         }
@@ -320,7 +322,7 @@ class UltraSimpleCallService {
             const startTime = callInfo.start_time;
             const duration = Math.floor((endTime - startTime) / 1000);
 
-            await this.callRepo.updateByIdAndAccount(callId, {
+            await this.callRepo.updateByIdAndAccount(callId, callInfo.account_id, {
                 "call_details.end_time": endTime,
                 "call_details.duration": duration,
                 updated_at: new Date()
