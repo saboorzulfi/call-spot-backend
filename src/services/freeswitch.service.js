@@ -272,10 +272,16 @@ class FreeSwitchService {
         if (bridgeRes.startsWith("+OK")) {
             console.log("✅ Bridge successful! Echo stopped and lead audio is now flowing.");
             
-            // Start recording the call
-            await this.startCallRecording(callId, agentUuid, leadUuid);
+            // Start recording the call and return the recording file path
+            const recordingFile = await this.startCallRecording(callId, agentUuid, leadUuid);
             
-            return leadUuid;
+            // Store recording file in a way that can be retrieved later
+            if (recordingFile) {
+                this.recordingFiles = this.recordingFiles || new Map();
+                this.recordingFiles.set(callId, recordingFile);
+            }
+            
+            return { leadUuid, recordingFile };
         } else {
             throw new Error("Bridge failed");
         }
@@ -297,16 +303,10 @@ class FreeSwitchService {
             console.log(`📹 Started recording for call ${callId} at ${recordingFile}`);
             
             // Store recording info for later retrieval
-            if (!this.activeCalls) this.activeCalls = new Map();
-            if (this.activeCalls.has(callId)) {
-                this.activeCalls.set(callId, {
-                    ...this.activeCalls.get(callId),
-                    recording_file: recordingFile,
-                    recording_started: new Date()
-                });
-            }
+            return recordingFile;
         } catch (error) {
             console.error(`Error starting call recording:`, error);
+            return null;
         }
     }
 

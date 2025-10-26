@@ -186,7 +186,11 @@ class UltraSimpleCallService {
             // Step 2: Call lead separately, then use uuid_bridge (same as your working test script)
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
             console.log(`📞 Dialing lead separately: ${leadNumber}`);
-            const leadUuid = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
+            const result = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
+            
+            // Handle both old and new return formats
+            const leadUuid = result.leadUuid || result;
+            const recordingFile = result.recordingFile;
             
             // Check if agent hung up while we were calling the lead
             // If call is no longer in activeCalls, it means agent hung up
@@ -210,11 +214,11 @@ class UltraSimpleCallService {
                 existingCallInfo.lead_uuid = leadUuid;
                 existingCallInfo.lead_number = leadNumber;
                 
-                // Store recording file info from fsService
-                const fsCallInfo = this.fsService.activeCalls?.get(call._id.toString());
-                if (fsCallInfo && fsCallInfo.recording_file) {
-                    existingCallInfo.recording_file = fsCallInfo.recording_file;
-                    existingCallInfo.recording_started = fsCallInfo.recording_started;
+                // Store recording file if available
+                if (recordingFile) {
+                    existingCallInfo.recording_file = recordingFile;
+                    existingCallInfo.recording_started = new Date();
+                    console.log(`📹 Stored recording file: ${recordingFile}`);
                 }
             }
 
@@ -333,15 +337,21 @@ class UltraSimpleCallService {
         let recordingUrl = null;
         try {
             const recordingFile = callInfo.recording_file;
+            console.log(`🔍 Call info:`, { callId, recordingFile, hasRecordingFile: !!recordingFile });
+            
             if (recordingFile) {
                 console.log(`📹 Uploading recording to S3: ${recordingFile}`);
                 recordingUrl = await this.recordingUploadService.uploadFromFreeSwitch(recordingFile, callId);
                 if (recordingUrl) {
-                    console.log(`✅ Recording uploaded: ${recordingUrl}`);
+                    console.log(`✅ Recording uploaded to S3: ${recordingUrl}`);
+                } else {
+                    console.log(`⚠️ Recording upload returned null`);
                 }
+            } else {
+                console.log(`⚠️ No recording file found for call ${callId}`);
             }
         } catch (error) {
-            console.error(`Error uploading recording:`, error);
+            console.error(`❌ Error uploading recording:`, error);
         }
 
         // Determine call status based on what happened
