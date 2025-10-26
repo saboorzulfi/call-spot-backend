@@ -141,9 +141,9 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent with echo - this works best for bridging
-        // Echo gives the agent something to hear while we connect the lead
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
+        // Call agent and put them on hold with silence
+        // This gives them a "waiting" tone instead of echo
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &hold()`;
         console.log("🧾 Agent Command:", agentCmd);
 
         const result = await this.api(agentCmd);
@@ -254,7 +254,7 @@ class FreeSwitchService {
             throw new Error("Lead did not answer");
         }
         
-        // Bridge the calls using uuid_bridge (same as your working test script method 2)
+        // Bridge the calls using uuid_bridge (exact same as your working test script)
         console.log(`🔗 Bridging agent (${agentUuid}) <-> lead (${leadUuid})`);
         
         const bridgeRes = await this.api(`uuid_bridge ${agentUuid} ${leadUuid}`);
