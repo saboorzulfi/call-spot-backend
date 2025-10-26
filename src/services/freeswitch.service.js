@@ -275,10 +275,13 @@ class FreeSwitchService {
             // Start recording the call and return the recording file path
             const recordingFile = await this.startCallRecording(callId, agentUuid, leadUuid);
             
-            // Store recording file in a way that can be retrieved later
             if (recordingFile) {
+                console.log(`✅ Recording file returned: ${recordingFile}`);
+                // Store recording file in a way that can be retrieved later
                 this.recordingFiles = this.recordingFiles || new Map();
                 this.recordingFiles.set(callId, recordingFile);
+            } else {
+                console.log(`⚠️  No recording file returned`);
             }
             
             return { leadUuid, recordingFile };
@@ -292,20 +295,26 @@ class FreeSwitchService {
      */
     async startCallRecording(callId, agentUuid, leadUuid) {
         try {
-            // Generate unique recording filename
+            // Generate unique recording filename  
             const timestamp = Date.now();
-            const recordingFile = `recordings/call_${callId}_${timestamp}.wav`;
+            const recordingFile = `call_${callId}_${timestamp}.wav`;
             
-            // Start recording on both legs (record both sides of the conversation)
+            console.log(`📹 Starting recording for call ${callId}`);
+            console.log(`📹 Agent UUID: ${agentUuid}, Lead UUID: ${leadUuid}`);
+            console.log(`📹 Filename: ${recordingFile}`);
+            
+            // Record both legs separately to ensure we get both sides of the conversation
             const recordResult1 = await this.api(`uuid_record ${agentUuid} start ${recordingFile}`);
             const recordResult2 = await this.api(`uuid_record ${leadUuid} start ${recordingFile}`);
             
-            console.log(`📹 Started recording for call ${callId} at ${recordingFile}`);
+            console.log(`📹 Agent recording result: ${recordResult1.trim()}`);
+            console.log(`📹 Lead recording result: ${recordResult2.trim()}`);
+            console.log(`📹 Recording will be saved to: /usr/local/freeswitch/recordings/${recordingFile}`);
             
-            // Store recording info for later retrieval
+            // Return the filename (relative to FreeSWITCH recordings directory)
             return recordingFile;
         } catch (error) {
-            console.error(`Error starting call recording:`, error);
+            console.error(`❌ Error starting call recording:`, error);
             return null;
         }
     }
