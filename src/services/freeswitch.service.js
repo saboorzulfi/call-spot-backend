@@ -141,9 +141,9 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent and leave them on the line (no park!)
-        // We'll bridge the lead directly to this agent's connection
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park()`;
+        // Call agent with echo - this works best for bridging
+        // Echo gives the agent something to hear while we connect the lead
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
         console.log("🧾 Agent Command:", agentCmd);
 
         const result = await this.api(agentCmd);
@@ -230,9 +230,9 @@ class FreeSwitchService {
     }
 
     /**
-     * Alternative: Call lead separately then bridge
+     * Call lead separately, then bridge using uuid_bridge (your working method 2)
      */
-    async callLeadSeparate(agentUuid, leadNumber, callId) {
+    async callLeadSeparateAndBridge(agentUuid, leadNumber, callId) {
         const leadUuid = this.generateUUID();
         
         console.log(`📞 Dialing lead separately: ${leadNumber}`);
@@ -254,17 +254,18 @@ class FreeSwitchService {
             throw new Error("Lead did not answer");
         }
         
-        // Bridge the calls
+        // Bridge the calls using uuid_bridge (same as your working test script method 2)
         console.log(`🔗 Bridging agent (${agentUuid}) <-> lead (${leadUuid})`);
         
         const bridgeRes = await this.api(`uuid_bridge ${agentUuid} ${leadUuid}`);
         console.log("📤 Bridge result:", bridgeRes.trim());
         
-        if (!bridgeRes.startsWith("+OK")) {
+        if (bridgeRes.startsWith("+OK")) {
+            console.log("✅ Bridge successful! Audio flowing between agent and lead.");
+            return leadUuid;
+        } else {
             throw new Error("Bridge failed");
         }
-        
-        return leadUuid;
     }
 
     /**
@@ -293,15 +294,6 @@ class FreeSwitchService {
 
             this.addListener('channel_answer', listener);
         });
-    }
-
-    /**
-     * Unpark a call
-     */
-    async unpark(uuid) {
-        const result = await this.api(`uuid_broadcast ${uuid} unpark:::-1`);
-        console.log(`📞 Unpark result for ${uuid}:`, result.trim());
-        return result.startsWith("+OK");
     }
 
     /**
