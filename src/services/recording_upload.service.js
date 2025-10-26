@@ -64,7 +64,10 @@ class RecordingUploadService {
             // FreeSWITCH typically stores recordings in /usr/local/freeswitch/recordings/
             // Adjust this path based on your FreeSWITCH installation
             const freeSwitchRecordingsPath = process.env.FREESWITCH_RECORDINGS_PATH || '/usr/local/freeswitch/recordings';
-            const fullPath = path.join(freeSwitchRecordingsPath, recordingFile);
+            
+            // Remove "recordings/" prefix if it exists in recordingFile
+            const fileName = recordingFile.replace(/^recordings\//, '');
+            const fullPath = path.join(freeSwitchRecordingsPath, fileName);
             
             console.log(`📹 Reading recording from: ${fullPath}`);
             
