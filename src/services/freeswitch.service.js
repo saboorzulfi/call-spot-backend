@@ -273,7 +273,14 @@ class FreeSwitchService {
             console.log("✅ Bridge successful! Echo stopped and lead audio is now flowing.");
             
             // Start recording the call and return the recording file path
-            const recordingFile = await this.startCallRecording(callId, agentUuid, leadUuid);
+            console.log(`📹 Attempting to start recording for call ${callId}`);
+            let recordingFile;
+            try {
+                recordingFile = await this.startCallRecording(callId, agentUuid, leadUuid);
+            } catch (err) {
+                console.error(`❌ Error in startCallRecording:`, err);
+                recordingFile = null;
+            }
             
             if (recordingFile) {
                 console.log(`✅ Recording file returned: ${recordingFile}`);
@@ -281,7 +288,7 @@ class FreeSwitchService {
                 this.recordingFiles = this.recordingFiles || new Map();
                 this.recordingFiles.set(callId, recordingFile);
             } else {
-                console.log(`⚠️  No recording file returned`);
+                console.log(`⚠️  No recording file returned - recording may have failed`);
             }
             
             return { leadUuid, recordingFile };
@@ -295,24 +302,24 @@ class FreeSwitchService {
      */
     async startCallRecording(callId, agentUuid, leadUuid) {
         try {
-            // Generate unique recording filename  
+            // Generate unique recording filename with absolute path
             const timestamp = Date.now();
-            const recordingFile = `call_${callId}_${timestamp}.wav`;
+            const filename = `call_${callId}_${timestamp}.wav`;
+            const recordingPath = `/usr/local/freeswitch/recordings/${filename}`;
             
             console.log(`📹 Starting recording for call ${callId}`);
             console.log(`📹 Agent UUID: ${agentUuid}, Lead UUID: ${leadUuid}`);
-            console.log(`📹 Filename: ${recordingFile}`);
+            console.log(`📹 Recording path: ${recordingPath}`);
             
             // Record both legs separately to ensure we get both sides of the conversation
-            const recordResult1 = await this.api(`uuid_record ${agentUuid} start ${recordingFile}`);
-            const recordResult2 = await this.api(`uuid_record ${leadUuid} start ${recordingFile}`);
+            const recordResult1 = await this.api(`uuid_record ${agentUuid} start ${recordingPath}`);
+            const recordResult2 = await this.api(`uuid_record ${leadUuid} start ${recordingPath}`);
             
             console.log(`📹 Agent recording result: ${recordResult1.trim()}`);
             console.log(`📹 Lead recording result: ${recordResult2.trim()}`);
-            console.log(`📹 Recording will be saved to: /usr/local/freeswitch/recordings/${recordingFile}`);
             
-            // Return the filename (relative to FreeSWITCH recordings directory)
-            return recordingFile;
+            // Return the relative filename for storage
+            return filename;
         } catch (error) {
             console.error(`❌ Error starting call recording:`, error);
             return null;
