@@ -88,7 +88,8 @@ class FreeSwitchService {
             const direction = evt.getHeader("Call-Direction");
             const callerIdName = evt.getHeader("Caller-Caller-ID-Name");
             const callerIdNumber = evt.getHeader("Caller-Caller-ID-Number");
-            console.log(`📞 Channel answered: ${uuid} | Direction: ${direction} | Caller: ${callerIdName} (${callerIdNumber})`);
+            const answerState = evt.getHeader("Answer-State");
+            console.log(`📞 Channel answered: ${uuid} | Direction: ${direction} | Caller: ${callerIdName} (${callerIdNumber}) | Answer State: ${answerState}`);
 
             // Notify listeners
             this.notifyListeners('channel_answer', { uuid, direction, callerIdName, callerIdNumber });
@@ -167,17 +168,29 @@ class FreeSwitchService {
             const timer = setTimeout(() => {
                 if (!answered) {
                     answered = true;
+                    console.log(`⏱️ Agent answer timeout for ${agentUuid}`);
                     resolve(false);
                 }
             }, timeout);
 
             const listener = (data) => {
+                // Only resolve as answered if it's the actual agent UUID and not early media
                 if (data.uuid === agentUuid && !answered) {
-                    answered = true;
-                    clearTimeout(timer);
-                    this.removeListener('channel_answer', listener);
-                    console.log(`✅ Agent answered: ${agentUuid}`);
-                    resolve(true);
+                    // Add a small delay to check if the channel actually stays active
+                    setTimeout(() => {
+                        // Re-check if still connected
+                        this.api(`uuid_exists ${agentUuid}`).then((result) => {
+                            if (result.includes('true')) {
+                                answered = true;
+                                clearTimeout(timer);
+                                this.removeListener('channel_answer', listener);
+                                console.log(`✅ Agent answered and channel is active: ${agentUuid}`);
+                                resolve(true);
+                            } else {
+                                console.log(`⚠️ Channel ${agentUuid} answered but quickly disconnected (early media)`);
+                            }
+                        });
+                    }, 500);
                 }
             };
 
