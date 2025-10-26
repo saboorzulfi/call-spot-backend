@@ -188,15 +188,31 @@ class UltraSimpleCallService {
                 return { success: false, reason: "Lead did not answer" };
             }
 
-            // Step 3: Lead answered - now wait for bridge confirmation
-            console.log(`✅ Lead answered! Waiting for bridge confirmation...`);
-            await this.updateCallStatus(call._id, call.account_id, "in-progress", "Lead answered, establishing bridge...");
-            
-            // Update active call info with lead connection details
+            // IMMEDIATELY store lead_uuid to track hangup events
             if (existingCallInfo) {
                 existingCallInfo.lead_uuid = leadUuid;
                 existingCallInfo.lead_number = leadNumber;
             }
+
+            console.log(`✅ Lead call started (${leadUuid}), waiting for bridge...`);
+            await this.updateCallStatus(call._id, call.account_id, "in-progress", "Lead call initiated, establishing bridge...");
+
+            // Wait for either bridge event or rejection (with timeout)
+            const bridgeSuccessful = await this.waitForBridgeOrRejection(call._id.toString(), leadUuid, 5000);
+            
+            if (!bridgeSuccessful) {
+                console.log(`❌ Bridge failed - lead may have rejected the call`);
+                // Make sure agent call is hung up
+                try {
+                    await this.fsService.hangupCall(agentUuid);
+                } catch (err) {
+                    console.log(`Could not hangup agent call (may already be disconnected)`);
+                }
+                return { success: false, reason: "Lead rejected or bridge failed" };
+            }
+
+            console.log(`✅ Bridge established successfully!`);
+            await this.updateCallStatus(call._id, call.account_id, "in-progress", "Both parties connected and talking");
 
             return { success: true };
 
@@ -205,6 +221,59 @@ class UltraSimpleCallService {
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "missed");
             return { success: false, reason: error.message };
         }
+    }
+
+    /**
+     * Wait for bridge to complete or detect rejection
+     */
+    waitForBridgeOrRejection(callId, leadUuid, timeout = 5000) {
+        return new Promise((resolve) => {
+            let resolved = false;
+            let callStillActive = true;
+            let checkInterval;
+            let timer;
+            let bridgeListener;
+
+            const cleanup = () => {
+                if (checkInterval) clearInterval(checkInterval);
+                if (timer) clearTimeout(timer);
+                if (bridgeListener) this.fsService.removeListener('channel_bridge', bridgeListener);
+            };
+
+            checkInterval = setInterval(() => {
+                // Check if call is still in activeCalls
+                if (!this.activeCalls.has(callId)) {
+                    callStillActive = false;
+                    if (!resolved) {
+                        resolved = true;
+                        cleanup();
+                        resolve(false); // Call was removed (rejected)
+                    }
+                }
+            }, 500);
+
+            timer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    cleanup();
+                    // If we still have the call active after timeout, assume success
+                    resolve(callStillActive);
+                }
+            }, timeout);
+
+            // Listen for bridge event
+            bridgeListener = (data) => {
+                if (!resolved && (data.uuid === leadUuid || data.otherUuid === leadUuid)) {
+                    if (!resolved) {
+                        resolved = true;
+                        cleanup();
+                        resolve(true);
+                    }
+                }
+            };
+
+            this.fsService.addListener('channel_bridge', bridgeListener);
+        });
     }
 
     /**
@@ -234,10 +303,25 @@ class UltraSimpleCallService {
         let finalStatus = "completed";
         let finalDescription = `Call completed - ${cause}`;
         
-        // If lead wasn't connected yet, this is an early hangup
-        if (!callInfo.lead_uuid) {
-            finalStatus = "missed";
-            finalDescription = `Agent hung up before lead was connected - ${cause}`;
+        // Handle different hangup causes
+        if (cause === "CALL_REJECTED" || cause === "USER_BUSY") {
+            finalStatus = "un-answered";
+            finalDescription = `Lead rejected the call - ${cause}`;
+        } else if (cause === "NORMAL_CLEARING") {
+            // Normal hangup - check if both parties were connected
+            if (!callInfo.lead_uuid) {
+                finalStatus = "missed";
+                finalDescription = `Agent hung up before lead was connected - ${cause}`;
+            } else {
+                finalStatus = "completed";
+                finalDescription = `Call completed successfully - ${cause}`;
+            }
+        } else {
+            // Other causes (timeout, etc.)
+            if (!callInfo.lead_uuid) {
+                finalStatus = "missed";
+                finalDescription = `Call failed - ${cause}`;
+            }
         }
         
         // Mark call with appropriate status
@@ -256,7 +340,7 @@ class UltraSimpleCallService {
         // Remove from active calls
         this.activeCalls.delete(callId);
         
-        console.log(`✅ Call ${callId} completed`);
+        console.log(`✅ Call ${callId} completed with status: ${finalStatus}`);
     }
 
     /**
