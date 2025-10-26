@@ -29,12 +29,30 @@ class UltraSimpleCallService {
         this.fsService.addListener('channel_hangup', (data) => {
             const { uuid, cause, callId } = data;
             
-            // Find the call and mark it as completed
+            console.log(`📴 Hangup event: uuid=${uuid}, callId=${callId}, cause=${cause}`);
+            
+            // Find the call by matching agent_uuid or lead_uuid
+            let foundCallId = null;
             for (const [callIdKey, callInfo] of this.activeCalls) {
+                // Match by agent or lead UUID
                 if (callInfo.agent_uuid === uuid || callInfo.lead_uuid === uuid) {
-                    this.handleCallCompleted(callIdKey, cause);
+                    foundCallId = callIdKey;
                     break;
                 }
+            }
+            
+            // If not found by UUID and callId is provided, try to find by callId
+            if (!foundCallId && callId) {
+                if (this.activeCalls.has(callId)) {
+                    foundCallId = callId;
+                }
+            }
+            
+            if (foundCallId) {
+                console.log(`🎯 Found call ${foundCallId} for hangup event`);
+                this.handleCallCompleted(foundCallId, cause);
+            } else {
+                console.log(`⚠️  Could not find call for hangup uuid ${uuid}`);
             }
         });
 
@@ -129,6 +147,15 @@ class UltraSimpleCallService {
 
             // Step 1: Call agent (30 seconds timeout)
             const agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString());
+            
+            // IMMEDIATELY store agent_uuid so hangup events can find this call
+            const existingCallInfo = this.activeCalls.get(call._id.toString());
+            if (existingCallInfo) {
+                existingCallInfo.agent_uuid = agentUuid;
+                existingCallInfo.agent_id = agent._id;
+                existingCallInfo.agent_name = agent.full_name;
+            }
+            
             const agentAnswered = await this.fsService.waitForAgentAnswer(agentUuid, 30000);
             
             if (!agentAnswered) {
@@ -147,6 +174,13 @@ class UltraSimpleCallService {
             console.log(`📞 Dialing lead and bridging: ${leadNumber}`);
             const leadUuid = await this.fsService.callLeadAndBridge(agentUuid, leadNumber, call._id.toString());
             
+            // Check if agent hung up while we were calling the lead
+            // If call is no longer in activeCalls, it means agent hung up
+            if (!this.activeCalls.has(call._id.toString())) {
+                console.log(`❌ Agent hung up during lead call setup`);
+                return { success: false, reason: "Agent hung up during call setup" };
+            }
+            
             if (!leadUuid) {
                 console.log(`❌ Lead did not answer`);
                 await this.fsService.hangupCall(agentUuid);
@@ -158,15 +192,9 @@ class UltraSimpleCallService {
             console.log(`✅ Lead answered! Waiting for bridge confirmation...`);
             await this.updateCallStatus(call._id, call.account_id, "in-progress", "Lead answered, establishing bridge...");
             
-            // Bridge will be detected via FreeSWITCH events, no need for timeout
-            
-            // Update active call info with successful connection details
-            const existingCallInfo = this.activeCalls.get(call._id.toString());
+            // Update active call info with lead connection details
             if (existingCallInfo) {
-                existingCallInfo.agent_uuid = agentUuid;
                 existingCallInfo.lead_uuid = leadUuid;
-                existingCallInfo.agent_id = agent._id;
-                existingCallInfo.agent_name = agent.full_name;
                 existingCallInfo.lead_number = leadNumber;
             }
 
@@ -202,9 +230,19 @@ class UltraSimpleCallService {
 
         console.log(`📴 Call completed: ${cause}`);
 
-        // Mark call as completed (using 'completed' status)
+        // Determine call status based on what happened
+        let finalStatus = "completed";
+        let finalDescription = `Call completed - ${cause}`;
+        
+        // If lead wasn't connected yet, this is an early hangup
+        if (!callInfo.lead_uuid) {
+            finalStatus = "missed";
+            finalDescription = `Agent hung up before lead was connected - ${cause}`;
+        }
+        
+        // Mark call with appropriate status
         if (callInfo && callInfo.account_id) {
-            await this.updateCallStatus(callId, callInfo.account_id, "completed", `Call completed - ${cause}`);
+            await this.updateCallStatus(callId, callInfo.account_id, finalStatus, finalDescription);
         }
         
         // Set agent back to free
@@ -257,10 +295,13 @@ class UltraSimpleCallService {
             if (!agent || !agent._id) continue; // Skip null/undefined agents
             
             const isActive = agent.is_active && agent.personal_phone;
-            const isNotBusy = await this.isAgentOnCall(agent._id.toString());
+            const isBusy = await this.isAgentOnCall(agent._id.toString());
             
-            if (isActive && !isNotBusy) {
+            // Only add agents that are active AND not busy (i.e., status is "free")
+            if (isActive && !isBusy) {
                 availableAgents.push(agent);
+            } else if (isBusy) {
+                console.log(`⏭️  Skipping agent ${agent.full_name} - currently on a call (status: in-progress)`);
             }
         }
 
@@ -269,7 +310,7 @@ class UltraSimpleCallService {
 
     /**
      * Check if agent is currently on a call (by checking agent status)
-     * Returns true if agent is NOT free (i.e., in-progress)
+     * Returns true if agent is busy (i.e., in-progress)
      */
     async isAgentOnCall(agentId) {
         try {
@@ -377,7 +418,7 @@ class UltraSimpleCallService {
                     break;
             }
             
-            await this.agentRepo.updateById(agentId, { status: agentStatus });
+            await this.agentRepo.update(agentId, { status: agentStatus });
         } catch (error) {
             console.error(`Error updating agent model status:`, error);
         }
