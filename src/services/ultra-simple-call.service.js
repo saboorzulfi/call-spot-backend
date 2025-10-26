@@ -5,6 +5,7 @@ const AgentGroupRepository = require("../v1/repositories/agentGroup.repository")
 const FreeSwitchService = require("./freeswitch.service");
 const RecordingUploadService = require("./recording_upload.service");
 const AppError = require("../utils/app_error.util");
+const Agent = require("../models/agent.model");
 
 class UltraSimpleCallService {
     constructor(fsService) {
@@ -20,6 +21,33 @@ class UltraSimpleCallService {
         
         // Setup hangup listener
         this.setupHangupListener();
+        
+        // Cleanup on startup
+        this.cleanupOnStartup();
+    }
+
+    /**
+     * Cleanup on startup - reset all agent statuses
+     */
+    async cleanupOnStartup() {
+        try {
+            console.log(`🧹 Cleaning up on startup...`);
+            
+            // Reset all agents to 'free' status
+            const agents = await Agent.find({ status: "in-progress", deleted_at: null });
+            if (agents && agents.length > 0) {
+                for (const agent of agents) {
+                    await Agent.findByIdAndUpdate(agent._id, { status: "free" });
+                    console.log(`🔄 Reset agent ${agent.full_name} (${agent._id}) from in-progress to free`);
+                }
+            }
+            
+            // Clear any stale active calls
+            this.activeCalls.clear();
+            console.log(`✅ Startup cleanup completed - ${agents?.length || 0} agents reset`);
+        } catch (error) {
+            console.error(`⚠️ Error during startup cleanup:`, error);
+        }
     }
 
     /**
