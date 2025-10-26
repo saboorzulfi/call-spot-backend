@@ -141,8 +141,8 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent with park - this keeps them on the line until we bridge with lead
-        // Park gives a ringback tone and holds the call until we use uuid_bridge
+        // Call agent and leave them on the line (no park!)
+        // We'll bridge the lead directly to this agent's connection
         const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park()`;
         console.log("🧾 Agent Command:", agentCmd);
 
@@ -185,15 +185,38 @@ class FreeSwitchService {
     }
 
     /**
-     * Call lead and bridge with agent
+     * Call lead with direct bridge to agent (works when agent is answered)
      */
-    async callLeadAndBridge(agentUuid, leadNumber, callId) {
+    async callLeadWithDirectBridge(agentNumber, leadNumber, callId) {
         const leadUuid = this.generateUUID();
         
-        console.log(`📞 Dialing lead and bridging: ${leadNumber}`);
+        console.log(`📞 Dialing lead with direct bridge: ${leadNumber}`);
         
-        // Use your exact working bridge command format
-        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(sofia/gateway/${this.config.gateway}/${agentUuid})`;
+        // Direct bridge approach - call lead and bridge to agent number
+        // This works when agent is already answered
+        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(sofia/gateway/${this.config.gateway}/${agentNumber})`;
+        console.log("🧾 Bridge Command:", bridgeCmd);
+        
+        const res = await this.api(bridgeCmd);
+        console.log("📤 Bridge originate result:", res.trim());
+        
+        if (!res.startsWith("+OK")) {
+            throw new Error("Failed to bridge calls");
+        }
+        
+        return leadUuid;
+    }
+
+    /**
+     * Call lead and bridge to agent UUID (for parked calls that were unparked)
+     */
+    async callLeadAndBridgeToUUID(agentUuid, leadNumber, callId) {
+        const leadUuid = this.generateUUID();
+        
+        console.log(`📞 Dialing lead and bridging to agent UUID: ${leadNumber}`);
+        
+        // Use the agent UUID in the bridge command
+        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(${agentUuid})`;
         console.log("🧾 Bridge Command:", bridgeCmd);
         
         const res = await this.api(bridgeCmd);
@@ -270,6 +293,15 @@ class FreeSwitchService {
 
             this.addListener('channel_answer', listener);
         });
+    }
+
+    /**
+     * Unpark a call
+     */
+    async unpark(uuid) {
+        const result = await this.api(`uuid_broadcast ${uuid} unpark:::-1`);
+        console.log(`📞 Unpark result for ${uuid}:`, result.trim());
+        return result.startsWith("+OK");
     }
 
     /**

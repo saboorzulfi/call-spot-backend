@@ -175,14 +175,22 @@ class UltraSimpleCallService {
                 return { success: false, reason: "Agent did not answer" };
             }
 
-            console.log(`✅ Agent ${agent.full_name} answered! Calling lead...`);
+            console.log(`✅ Agent ${agent.full_name} answered! Unparking and preparing to bridge...`);
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "in-progress");
             await this.updateCallStatus(call._id, call.account_id, "in-progress", `Agent ${agent.full_name} answered, calling lead...`);
 
-            // Step 2: Call lead separately (better approach when agent is on park)
+            // Unpark the agent call before bridging
+            try {
+                await this.fsService.unpark(agentUuid);
+                console.log(`✅ Agent unparked`);
+            } catch (err) {
+                console.log(`⚠️ Could not unpark (may not be needed): ${err.message}`);
+            }
+
+            // Step 2: Call lead and bridge to agent using UUID-based bridge
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
-            console.log(`📞 Dialing lead separately: ${leadNumber}`);
-            const leadUuid = await this.fsService.callLeadSeparate(agentUuid, leadNumber, call._id.toString());
+            console.log(`📞 Dialing lead with bridge to agent UUID: ${leadNumber}`);
+            const leadUuid = await this.fsService.callLeadAndBridgeToUUID(agentUuid, leadNumber, call._id.toString());
             
             // Check if agent hung up while we were calling the lead
             // If call is no longer in activeCalls, it means agent hung up
