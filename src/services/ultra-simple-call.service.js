@@ -141,6 +141,8 @@ class UltraSimpleCallService {
      * Try calling a single agent
      */
     async tryAgentCall(call, agent) {
+        let agentUuid = null; // Declare outside try for catch block access
+        
         try {
             // Update call status
             await this.updateCallStatus(call._id, call.account_id, "in-progress", `Calling agent: ${agent.full_name}`);
@@ -154,7 +156,7 @@ class UltraSimpleCallService {
             }
 
             // Step 1: Call agent (30 seconds timeout)
-            const agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString());
+            agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString());
             
             // IMMEDIATELY store agent_uuid so hangup events can find this call
             const existingCallInfo = this.activeCalls.get(call._id.toString());
@@ -177,10 +179,10 @@ class UltraSimpleCallService {
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "in-progress");
             await this.updateCallStatus(call._id, call.account_id, "in-progress", `Agent ${agent.full_name} answered, calling lead...`);
 
-            // Step 2: Call lead and bridge
+            // Step 2: Call lead separately (better approach when agent is on park)
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
-            console.log(`📞 Dialing lead and bridging: ${leadNumber}`);
-            const leadUuid = await this.fsService.callLeadAndBridge(agentUuid, leadNumber, call._id.toString());
+            console.log(`📞 Dialing lead separately: ${leadNumber}`);
+            const leadUuid = await this.fsService.callLeadSeparate(agentUuid, leadNumber, call._id.toString());
             
             // Check if agent hung up while we were calling the lead
             // If call is no longer in activeCalls, it means agent hung up
@@ -196,54 +198,43 @@ class UltraSimpleCallService {
                 return { success: false, reason: "Lead did not answer" };
             }
 
+            // callLeadSeparate already handled everything: called lead, waited for answer, and bridged
+            // So if we get here with a leadUuid, the call is successful!
+            
             // IMMEDIATELY store lead_uuid to track hangup events
             if (existingCallInfo) {
                 existingCallInfo.lead_uuid = leadUuid;
                 existingCallInfo.lead_number = leadNumber;
             }
 
-            console.log(`✅ Lead call started (${leadUuid}), waiting for bridge...`);
-            await this.updateCallStatus(call._id, call.account_id, "in-progress", "Lead call initiated, establishing bridge...");
-
-            // Wait for either bridge event or rejection (with timeout)
-            const bridgeSuccessful = await this.waitForBridgeOrRejection(call._id.toString(), leadUuid, 5000);
-            
-            if (!bridgeSuccessful) {
-                // Check if this was a routing error (don't try next agent if so)
-                const callInfo = this.activeCalls.get(call._id.toString());
-                const isRoutingError = callInfo && callInfo.last_hangup_cause && 
-                    (callInfo.last_hangup_cause === "INVALID_NUMBER_FORMAT" || 
-                     callInfo.last_hangup_cause === "NO_ROUTE_DESTINATION" ||
-                     callInfo.last_hangup_cause === "NORMAL_TEMPORARY_FAILURE");
-                
-                if (isRoutingError) {
-                    console.log(`❌ Routing error detected: ${callInfo.last_hangup_cause} - stopping attempts`);
-                    // Make sure agent call is hung up
-                    try {
-                        await this.fsService.hangupCall(agentUuid);
-                    } catch (err) {
-                        console.log(`Could not hangup agent call (may already be disconnected)`);
-                    }
-                    return { success: false, reason: `Routing error: ${callInfo.last_hangup_cause}`, stop_trying: true };
-                }
-                
-                console.log(`❌ Bridge failed - lead may have rejected the call`);
-                // Make sure agent call is hung up
-                try {
-                    await this.fsService.hangupCall(agentUuid);
-                } catch (err) {
-                    console.log(`Could not hangup agent call (may already be disconnected)`);
-                }
-                return { success: false, reason: "Lead rejected or bridge failed" };
-            }
-
-            console.log(`✅ Bridge established successfully!`);
+            console.log(`✅ Bridge established successfully! Agent and lead are now connected and talking.`);
             await this.updateCallStatus(call._id, call.account_id, "in-progress", "Both parties connected and talking");
 
             return { success: true };
 
         } catch (error) {
             console.error(`❌ Error calling agent ${agent.full_name}:`, error);
+            
+            // Check if this was a routing error
+            const callInfo = this.activeCalls.get(call._id.toString());
+            const isRoutingError = callInfo && callInfo.last_hangup_cause && 
+                (callInfo.last_hangup_cause === "INVALID_NUMBER_FORMAT" || 
+                 callInfo.last_hangup_cause === "NO_ROUTE_DESTINATION" ||
+                 callInfo.last_hangup_cause === "NORMAL_TEMPORARY_FAILURE");
+            
+            if (isRoutingError) {
+                // Make sure agent call is hung up
+                if (agentUuid) {
+                    try {
+                        await this.fsService.hangupCall(agentUuid);
+                    } catch (err) {
+                        console.log(`Could not hangup agent call (may already be disconnected)`);
+                    }
+                }
+                await this.updateAgentStatus(call._id, call.account_id, agent._id, "free");
+                return { success: false, reason: `Routing error: ${callInfo.last_hangup_cause}`, stop_trying: true };
+            }
+            
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "missed");
             return { success: false, reason: error.message };
         }
