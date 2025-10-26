@@ -108,11 +108,12 @@ class FreeSwitchService {
             const uuid = evt.getHeader("Unique-ID");
             const cause = evt.getHeader("Hangup-Cause");
             const callId = evt.getHeader("Call-ID");
-            if (!callId) return
-            console.log(`📴 Channel hung up: ${uuid} | Cause: ${cause} | Call ID: ${callId}`);
+            const callDirection = evt.getHeader("Call-Direction");
+            
+            console.log(`📴 Channel hung up: ${uuid} | Cause: ${cause} | Direction: ${callDirection} | Call ID: ${callId || 'N/A'}`);
 
-            // Notify listeners
-            this.notifyListeners('channel_hangup', { uuid, cause, callId });
+            // Notify listeners (always notify, even if callId is null)
+            this.notifyListeners('channel_hangup', { uuid, cause, callId: callId || null });
         });
     }
 
