@@ -99,6 +99,12 @@ class UltraSimpleCallService {
         try {
             console.log(`🚀 Starting call: ${call._id}`);
             
+            // Check if this call is already in progress
+            if (this.activeCalls.has(call._id.toString())) {
+                console.log(`⚠️ Call ${call._id} is already in progress, aborting new call`);
+                return { success: false, reason: "Call already in progress" };
+            }
+            
             // Store call info for hangup handling (even if call fails early)
             this.activeCalls.set(call._id.toString(), {
                 call_id: call._id,
@@ -595,12 +601,21 @@ class UltraSimpleCallService {
      */
     async updateCallRecording(callId, accountId, recordingUrl) {
         try {
+            console.log(`📹 Updating call ${callId} with new recording URL: ${recordingUrl}`);
+            
+            // Get the current call to check if there's an old recording
+            const currentCall = await this.callRepo.findById(callId);
+            if (currentCall?.recording_url && currentCall.recording_url !== recordingUrl) {
+                console.log(`📹 Replacing old recording URL: ${currentCall.recording_url} with new: ${recordingUrl}`);
+            }
+            
             await this.callRepo.updateByIdAndAccount(callId, accountId, {
                 "call_details.recording_url": recordingUrl,
                 recording_url: recordingUrl,
                 updated_at: new Date()
             });
-            console.log(`📹 Call ${callId} recording saved: ${recordingUrl}`);
+            
+            console.log(`📹 Call ${callId} recording successfully updated in database: ${recordingUrl}`);
         } catch (error) {
             console.error(`Error updating call recording:`, error);
         }
