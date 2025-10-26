@@ -243,13 +243,6 @@ class UltraSimpleCallService {
             const leadUuid = result.leadUuid || result;
             const recordingFile = result.recordingFile;
             
-            // Check if agent hung up while we were calling the lead
-            // If call is no longer in activeCalls, it means agent hung up
-            if (!this.activeCalls.has(call._id.toString())) {
-                console.log(`❌ Agent hung up during lead call setup`);
-                return { success: false, reason: "Agent hung up during call setup" };
-            }
-            
             if (!leadUuid) {
                 console.log(`❌ Lead did not answer`);
                 await this.fsService.hangupCall(agentUuid);
