@@ -141,9 +141,9 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent and put them on hold with silence
-        // This gives them a "waiting" tone instead of echo
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &hold()`;
+        // Call agent with echo (same as your working test script)
+        // When we bridge, the echo will be replaced with lead's audio
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
         console.log("🧾 Agent Command:", agentCmd);
 
         const result = await this.api(agentCmd);
@@ -254,14 +254,23 @@ class FreeSwitchService {
             throw new Error("Lead did not answer");
         }
         
-        // Bridge the calls using uuid_bridge (exact same as your working test script)
+        // Bridge the calls using uuid_bridge (same as your working test script)
         console.log(`🔗 Bridging agent (${agentUuid}) <-> lead (${leadUuid})`);
         
+        // Stop the echo on agent side before bridging
+        try {
+            // Stop the echo application without hanging up the call
+            await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
+        } catch (err) {
+            console.log(`Could not stop echo, continuing with bridge...`);
+        }
+        
+        // Now bridge - the lead's audio will replace any existing media
         const bridgeRes = await this.api(`uuid_bridge ${agentUuid} ${leadUuid}`);
         console.log("📤 Bridge result:", bridgeRes.trim());
         
         if (bridgeRes.startsWith("+OK")) {
-            console.log("✅ Bridge successful! Audio flowing between agent and lead.");
+            console.log("✅ Bridge successful! Echo stopped and lead audio is now flowing.");
             return leadUuid;
         } else {
             throw new Error("Bridge failed");
