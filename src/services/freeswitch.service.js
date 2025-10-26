@@ -271,10 +271,75 @@ class FreeSwitchService {
         
         if (bridgeRes.startsWith("+OK")) {
             console.log("✅ Bridge successful! Echo stopped and lead audio is now flowing.");
+            
+            // Start recording the call
+            await this.startCallRecording(callId, agentUuid, leadUuid);
+            
             return leadUuid;
         } else {
             throw new Error("Bridge failed");
         }
+    }
+
+    /**
+     * Start recording a call
+     */
+    async startCallRecording(callId, agentUuid, leadUuid) {
+        try {
+            // Generate unique recording filename
+            const timestamp = Date.now();
+            const recordingFile = `recordings/call_${callId}_${timestamp}.wav`;
+            
+            // Start recording on both legs (record both sides of the conversation)
+            const recordResult1 = await this.api(`uuid_record ${agentUuid} start ${recordingFile}`);
+            const recordResult2 = await this.api(`uuid_record ${leadUuid} start ${recordingFile}`);
+            
+            console.log(`📹 Started recording for call ${callId} at ${recordingFile}`);
+            
+            // Store recording info for later retrieval
+            if (!this.activeCalls) this.activeCalls = new Map();
+            if (this.activeCalls.has(callId)) {
+                this.activeCalls.set(callId, {
+                    ...this.activeCalls.get(callId),
+                    recording_file: recordingFile,
+                    recording_started: new Date()
+                });
+            }
+        } catch (error) {
+            console.error(`Error starting call recording:`, error);
+        }
+    }
+
+    /**
+     * Stop recording and get the file
+     */
+    async stopCallRecording(callId) {
+        try {
+            const callInfo = this.activeCalls?.get(callId);
+            if (!callInfo || !callInfo.recording_file) return null;
+            
+            const recordingFile = callInfo.recording_file;
+            
+            // Stop recording on the legs (they're already hung up, but let's make sure)
+            console.log(`📹 Stopped recording for call ${callId} at ${recordingFile}`);
+            
+            // Return the recording URL
+            const recordingUrl = `${this.getRecordingBaseUrl()}/${recordingFile}`;
+            
+            return recordingUrl;
+        } catch (error) {
+            console.error(`Error stopping call recording:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Get base URL for recordings
+     */
+    getRecordingBaseUrl() {
+        // Configure this based on your server setup
+        // Example: http://localhost:8080 or your CDN URL
+        return process.env.RECORDING_BASE_URL || 'http://localhost:8080';
     }
 
     /**

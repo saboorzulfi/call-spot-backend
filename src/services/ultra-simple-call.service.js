@@ -3,6 +3,7 @@ const CampaignRepository = require("../v1/repositories/campaign.repository");
 const AgentRepository = require("../v1/repositories/agent.repository");
 const AgentGroupRepository = require("../v1/repositories/agentGroup.repository");
 const FreeSwitchService = require("./freeswitch.service");
+const RecordingUploadService = require("./recording_upload.service");
 const AppError = require("../utils/app_error.util");
 
 class UltraSimpleCallService {
@@ -12,6 +13,7 @@ class UltraSimpleCallService {
         this.agentRepo = new AgentRepository();
         this.agentGroupRepo = new AgentGroupRepository();
         this.fsService = fsService;
+        this.recordingUploadService = new RecordingUploadService();
         
         // Simple tracking - just active calls
         this.activeCalls = new Map();
@@ -91,7 +93,9 @@ class UltraSimpleCallService {
                 agent_name: null,
                 lead_number: null,
                 start_time: new Date(),
-                last_hangup_cause: null
+                last_hangup_cause: null,
+                recording_file: null,
+                recording_started: null
             });
             
             // Step 1: Find campaign
@@ -201,10 +205,17 @@ class UltraSimpleCallService {
             // callLeadSeparate already handled everything: called lead, waited for answer, and bridged
             // So if we get here with a leadUuid, the call is successful!
             
-            // IMMEDIATELY store lead_uuid to track hangup events
+            // IMMEDIATELY store lead_uuid and recording info to track
             if (existingCallInfo) {
                 existingCallInfo.lead_uuid = leadUuid;
                 existingCallInfo.lead_number = leadNumber;
+                
+                // Store recording file info from fsService
+                const fsCallInfo = this.fsService.activeCalls?.get(call._id.toString());
+                if (fsCallInfo && fsCallInfo.recording_file) {
+                    existingCallInfo.recording_file = fsCallInfo.recording_file;
+                    existingCallInfo.recording_started = fsCallInfo.recording_started;
+                }
             }
 
             console.log(`✅ Bridge established successfully! Agent and lead are now connected and talking.`);
@@ -318,6 +329,21 @@ class UltraSimpleCallService {
         callInfo.last_hangup_cause = cause;
         console.log(`📴 Call completed: ${cause}`);
 
+        // Stop recording and upload to S3
+        let recordingUrl = null;
+        try {
+            const recordingFile = callInfo.recording_file;
+            if (recordingFile) {
+                console.log(`📹 Uploading recording to S3: ${recordingFile}`);
+                recordingUrl = await this.recordingUploadService.uploadFromFreeSwitch(recordingFile, callId);
+                if (recordingUrl) {
+                    console.log(`✅ Recording uploaded: ${recordingUrl}`);
+                }
+            }
+        } catch (error) {
+            console.error(`Error uploading recording:`, error);
+        }
+
         // Determine call status based on what happened
         let finalStatus = "completed";
         let finalDescription = `Call completed - ${cause}`;
@@ -350,6 +376,11 @@ class UltraSimpleCallService {
         // Mark call with appropriate status
         if (callInfo && callInfo.account_id) {
             await this.updateCallStatus(callId, callInfo.account_id, finalStatus, finalDescription);
+        }
+        
+        // Update call with recording URL
+        if (recordingUrl && callInfo && callInfo.account_id) {
+            await this.updateCallRecording(callId, callInfo.account_id, recordingUrl);
         }
         
         // Set agent back to free
@@ -528,6 +559,22 @@ class UltraSimpleCallService {
             await this.agentRepo.update(agentId, { status: agentStatus });
         } catch (error) {
             console.error(`Error updating agent model status:`, error);
+        }
+    }
+
+    /**
+     * Update call with recording URL
+     */
+    async updateCallRecording(callId, accountId, recordingUrl) {
+        try {
+            await this.callRepo.updateByIdAndAccount(callId, accountId, {
+                "call_details.recording_url": recordingUrl,
+                recording_url: recordingUrl,
+                updated_at: new Date()
+            });
+            console.log(`📹 Call ${callId} recording saved: ${recordingUrl}`);
+        } catch (error) {
+            console.error(`Error updating call recording:`, error);
         }
     }
 
