@@ -35,9 +35,26 @@ class UltraSimpleCallService {
             
             // Find the call by matching agent_uuid or lead_uuid
             let foundCallId = null;
+            let isLeadHangup = false;
+            
             for (const [callIdKey, callInfo] of this.activeCalls) {
-                // Match by agent or lead UUID
-                if (callInfo.agent_uuid === uuid || callInfo.lead_uuid === uuid) {
+                // Check if this is the lead's UUID
+                if (callInfo.lead_uuid === uuid) {
+                    foundCallId = callIdKey;
+                    isLeadHangup = true;
+                    
+                    // If lead hung up, also hang up the agent
+                    if (callInfo.agent_uuid) {
+                        console.log(`📞 Hanging up agent because lead hung up`);
+                        this.fsService.hangupCall(callInfo.agent_uuid).catch(err => {
+                            console.log(`⚠️ Could not hangup agent: ${err.message}`);
+                        });
+                    }
+                    break;
+                }
+                
+                // Match by agent UUID
+                if (callInfo.agent_uuid === uuid) {
                     foundCallId = callIdKey;
                     break;
                 }
@@ -51,7 +68,7 @@ class UltraSimpleCallService {
             }
             
             if (foundCallId) {
-                console.log(`🎯 Found call ${foundCallId} for hangup event`);
+                console.log(`🎯 Found call ${foundCallId} for hangup event (isLeadHangup: ${isLeadHangup})`);
                 this.handleCallCompleted(foundCallId, cause);
             } else {
                 console.log(`⚠️  Could not find call for hangup uuid ${uuid}`);
@@ -571,6 +588,7 @@ class UltraSimpleCallService {
             console.error(`Error updating agent model status:`, error);
         }
     }
+
 
     /**
      * Update call with recording URL
