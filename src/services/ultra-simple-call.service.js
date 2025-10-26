@@ -90,7 +90,8 @@ class UltraSimpleCallService {
                 agent_id: null,
                 agent_name: null,
                 lead_number: null,
-                start_time: new Date()
+                start_time: new Date(),
+                last_hangup_cause: null
             });
             
             // Step 1: Find campaign
@@ -115,6 +116,13 @@ class UltraSimpleCallService {
                 if (result.success) {
                     console.log(`✅ Call connected!`);
                     return { success: true, agent: agent.full_name };
+                }
+                
+                // If this was a routing error (like invalid number), stop trying agents
+                if (result.stop_trying) {
+                    console.log(`🛑 Stopping agent attempts due to routing error: ${result.reason}`);
+                    await this.updateCallStatus(call._id, call.account_id, "missed", result.reason);
+                    return { success: false, reason: result.reason };
                 }
             }
 
@@ -201,6 +209,24 @@ class UltraSimpleCallService {
             const bridgeSuccessful = await this.waitForBridgeOrRejection(call._id.toString(), leadUuid, 5000);
             
             if (!bridgeSuccessful) {
+                // Check if this was a routing error (don't try next agent if so)
+                const callInfo = this.activeCalls.get(call._id.toString());
+                const isRoutingError = callInfo && callInfo.last_hangup_cause && 
+                    (callInfo.last_hangup_cause === "INVALID_NUMBER_FORMAT" || 
+                     callInfo.last_hangup_cause === "NO_ROUTE_DESTINATION" ||
+                     callInfo.last_hangup_cause === "NORMAL_TEMPORARY_FAILURE");
+                
+                if (isRoutingError) {
+                    console.log(`❌ Routing error detected: ${callInfo.last_hangup_cause} - stopping attempts`);
+                    // Make sure agent call is hung up
+                    try {
+                        await this.fsService.hangupCall(agentUuid);
+                    } catch (err) {
+                        console.log(`Could not hangup agent call (may already be disconnected)`);
+                    }
+                    return { success: false, reason: `Routing error: ${callInfo.last_hangup_cause}`, stop_trying: true };
+                }
+                
                 console.log(`❌ Bridge failed - lead may have rejected the call`);
                 // Make sure agent call is hung up
                 try {
@@ -297,6 +323,8 @@ class UltraSimpleCallService {
         const callInfo = this.activeCalls.get(callId);
         if (!callInfo) return;
 
+        // Store the hangup cause for reference
+        callInfo.last_hangup_cause = cause;
         console.log(`📴 Call completed: ${cause}`);
 
         // Determine call status based on what happened
@@ -307,6 +335,10 @@ class UltraSimpleCallService {
         if (cause === "CALL_REJECTED" || cause === "USER_BUSY") {
             finalStatus = "un-answered";
             finalDescription = `Lead rejected the call - ${cause}`;
+        } else if (cause === "INVALID_NUMBER_FORMAT" || cause === "NORMAL_TEMPORARY_FAILURE" || cause === "NO_ROUTE_DESTINATION") {
+            // Call routing failures
+            finalStatus = "missed";
+            finalDescription = `Call failed due to routing error - ${cause}`;
         } else if (cause === "NORMAL_CLEARING") {
             // Normal hangup - check if both parties were connected
             if (!callInfo.lead_uuid) {
