@@ -97,6 +97,7 @@ class UltraSimpleCallService {
             
             if (foundCallId) {
                 console.log(`🎯 Found call ${foundCallId} for hangup event (isLeadHangup: ${isLeadHangup})`);
+                console.log(`📊 activeCalls has ${this.activeCalls.size} entries:`, Array.from(this.activeCalls.keys()));
                 this.handleCallCompleted(foundCallId, cause);
             } else {
                 console.log(`⚠️  Could not find call for hangup uuid ${uuid}`);
