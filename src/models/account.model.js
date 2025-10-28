@@ -25,29 +25,15 @@ const accountSchema = new mongoose.Schema({
   profileImage: {
     type: String,
   },
-  
-  // Contact Information
-  personal_phone: {
-    type: String,
-  },
   phone: {
     type: String,
-  },
-  work_email: {
-    type: String,
-    unique: true,
-    required: true,
-  },
-  personal_email: {
-    type: String,
-    unique: true,
   },
   email: {
     type: String,
     unique: true,
     required: true,
   },
-  
+
   // Authentication & Role
   role: {
     type: String,
@@ -62,7 +48,7 @@ const accountSchema = new mongoose.Schema({
   loginKey: {
     type: String,
   },
-  
+
   // Social Media Integration
   tiktok_access_token: {
     type: String,
@@ -96,7 +82,7 @@ const accountSchema = new mongoose.Schema({
     id_token: String,
     granted_scopes: String
   },
-  
+
   // Business Features
   campaign_settings: {
     facebook_campaign_setting: {
@@ -118,7 +104,7 @@ const accountSchema = new mongoose.Schema({
     sip_balance: String,
     updated_at: { type: Date, default: Date.now }
   },
-  
+
   // WhatsApp Integration
   whatsapp_token: {
     type: String,
@@ -129,7 +115,7 @@ const accountSchema = new mongoose.Schema({
   whatsapp_business_account_id: {
     type: String,
   },
-  
+
   // AI & Agent Features
   ai_agent_phone_number: {
     type: String,
@@ -140,7 +126,7 @@ const accountSchema = new mongoose.Schema({
   agent_phone_number_id: {
     type: String,
   },
-  
+
   // Settings & Preferences
   time_zone: {
     type: String,
@@ -155,7 +141,7 @@ const accountSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+
   // Subscription & Billing
   subscription_start_date: {
     type: String,
@@ -163,7 +149,7 @@ const accountSchema = new mongoose.Schema({
   subscription_end_date: {
     type: String,
   },
-  
+
   // API Keys & External Services
   api_key_info: {
     key: String,
@@ -180,13 +166,13 @@ const accountSchema = new mongoose.Schema({
   eleven_labs_api_key: {
     type: String,
   },
-  
+
   // SkyLead Integration
   skylead_settings: {
     skylead_integration_key: String,
     skylead_base_url: String
   },
-  
+
   // Access Control
   active: {
     type: Boolean,
@@ -196,7 +182,7 @@ const accountSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
-  
+
   // Legacy Fields (keeping for backward compatibility)
   currentStatus: {
     type: String,
@@ -212,20 +198,13 @@ const accountSchema = new mongoose.Schema({
   },
   dateOfEntry: Date,
   expiryDate: Date,
-  
-  // Timestamps
-  created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now },
+
   deleted_at: { type: Date },
   last_login: { type: Date },
   lastLogin: { type: Date },
-}, { 
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+}, 
+{timestamps: true});
 
-// Indexes for better performance
 accountSchema.index({ role: 1 });
 accountSchema.index({ active: 1 });
 accountSchema.index({ created_at: -1 });
@@ -234,43 +213,16 @@ accountSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
     this.password = await bcryptjs.hash(this.password, 8);
   }
-  
-  // Set timestamps
+
   if (this.isNew) {
-    this.created_at = new Date();
-    this.updated_at = new Date();
-    
-    // Auto-increment doc_number
     const nextSeq = await AutoIncrement.findOneAndUpdate(
       { name: "account_number" },
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
     this.doc_number = nextSeq.seq;
-  } else {
-    this.updated_at = new Date();
-  }
-  
-  // Ensure legacy fields are set for backward compatibility
-  if (this.work_email && !this.email) {
-    this.email = this.work_email;
-  }
-  if (this.email && !this.work_email) {
-    this.work_email = this.email;
-  }
-  if (this.personal_phone && !this.phone) {
-    this.phone = this.personal_phone;
-  }
-  if (this.phone && !this.personal_phone) {
-    this.personal_phone = this.phone;
-  }
-  if (this.last_login && !this.lastLogin) {
-    this.lastLogin = this.last_login;
-  }
-  if (this.lastLogin && !this.last_login) {
-    this.last_login = this.lastLogin;
-  }
-  
+  } 
+
   next();
 });
 
@@ -279,12 +231,6 @@ accountSchema.pre("findOneAndUpdate", async function (next) {
   if (update.$set && update.$set.password) {
     update.$set.password = await bcryptjs.hash(update.$set.password, 8);
   }
-  
-  // Set updated_at timestamp
-  if (update.$set) {
-    update.$set.updated_at = new Date();
-  }
-  
   next();
 });
 

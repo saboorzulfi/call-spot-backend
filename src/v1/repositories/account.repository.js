@@ -64,6 +64,23 @@ class AccountRepository {
     }
   }
 
+  async findByEmailOrPhone(email, phone) {
+    try {
+      const account = await Account.findOne({
+        $or: [
+          { email: email },
+          { work_email: email },
+          { personal_email: email },
+          { phone: phone },
+          { personal_phone: phone }
+        ]
+      });
+      return account;
+    } catch (error) {
+      throw new AppError("Unable to search for account", 500);
+    }
+  }
+
   async findAll(options = {}) {
     try {
       const { page = 1, limit = 10, role, active, sortBy = "created_at", sortOrder = "desc", search } = options;

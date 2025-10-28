@@ -8,7 +8,9 @@ const blocklistRoutes = require("./blocklist.routes");
 const facebookRoutes = require("./facebook.routes");
 const integrationRoutes = require("./integration.routes");
 const { isLoggedIn } = require("../middlewares/auth.middleware");
-const { statusCheckMiddleware } = require("../middlewares/status.middleware");
+const AuthController = require("../controllers/auth.controller");
+const authController = new AuthController();
+
 
 const router = express.Router();
 
@@ -18,10 +20,13 @@ router.use("/auth", authRoutes);
 // Apply authentication middleware to all routes below
 router.use(isLoggedIn);
 
-// Apply status check middleware
-router.use(statusCheckMiddleware);
-
 // Protected routes (authentication required)
+router.get("/account", authController.getProfile)
+router.put("/account", authController.updateProfile)
+router.post("/change-password", authController.changePassword)
+
+
+
 router.use("/agent", agentRoutes);
 router.use("/agent-group", agentGroupRoutes);
 router.use("/campaign", campaignRoutes);
@@ -29,5 +34,6 @@ router.use("/call", callRoutes);
 router.use("/block", blocklistRoutes);
 router.use("/facebook", facebookRoutes);
 router.use("/integration", integrationRoutes);
+
 
 module.exports = router;
