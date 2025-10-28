@@ -57,12 +57,13 @@ class AgentController {
       throw new AppError("Access denied", 403);
     }
 
-    return AppResponse.success(res, { agent }, "Agent retrieved successfully", statusCode.OK);
+    let responseData = { agent };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   getAll = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-    const { page, limit, status, agent_type, sortBy, sortOrder,search } = req.query;
+    const { page, limit, status, agent_type, sortBy, sortOrder, search } = req.query;
 
     const options = {
       search,
@@ -76,10 +77,11 @@ class AgentController {
 
     const result = await this.agentRepo.findByAccount(accountId, options);
 
-    return AppResponse.success(res, {
+    let responseData = {
       agents: result.agents,
       pagination: result.pagination
-    }, "Agents retrieved successfully", statusCode.OK);
+    }
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Update agent
@@ -108,7 +110,8 @@ class AgentController {
 
     const agent = await this.agentRepo.update(id, updateData);
 
-    return AppResponse.success(res, { agent }, "Agent updated successfully", statusCode.OK);
+    let responseData = { agent };
+    return AppResponse.success(res, responseData, "Agent updated successfully", statusCode.OK);
   });
 
   // Delete agent
@@ -124,7 +127,8 @@ class AgentController {
 
     await this.agentRepo.delete(id);
 
-    return AppResponse.success(res, {}, "Agent deleted successfully", statusCode.OK);
+    let responseData = {};
+    return AppResponse.success(res, responseData, "Agent deleted successfully", statusCode.OK);
   });
 
   // Get available agents
@@ -148,7 +152,8 @@ class AgentController {
       parseInt(limit)
     );
 
-    return AppResponse.success(res, { agents }, "Agents by performance retrieved successfully", statusCode.OK);
+    let responseData = { agents };
+    return AppResponse.success(res, responseData, "Agents by performance retrieved successfully", statusCode.OK);
   });
 
   // Get agents by availability
@@ -162,7 +167,8 @@ class AgentController {
 
     const agents = await this.agentRepo.findAvailableByTime(accountId, time, day);
 
-    return AppResponse.success(res, { agents }, "Available agents by time retrieved successfully", statusCode.OK);
+    let responseData = { agents };
+    return AppResponse.success(res, responseData, "Available agents by time retrieved successfully", statusCode.OK);
   });
 
   // Update agent performance metrics
@@ -179,7 +185,8 @@ class AgentController {
 
     const agent = await this.agentRepo.updatePerformanceMetrics(id, conversationData);
 
-    return AppResponse.success(res, { agent }, "Performance metrics updated successfully", statusCode.OK);
+    let responseData = {agent};
+    return AppResponse.success(res, responseData, "Performance metrics updated successfully", statusCode.OK);
   });
 
   // Generate API key for agent
@@ -197,7 +204,8 @@ class AgentController {
     // Generate API key
     const apiKey = await this.agentRepo.generateApiKey(id, permissions, expires_in);
 
-    return AppResponse.success(res, { api_key: apiKey }, "API key generated successfully", statusCode.OK);
+    let responseData = {api_key: apiKey};
+    return AppResponse.success(res, responseData, "API key generated successfully", statusCode.OK);
   });
 
   // Revoke API key
@@ -218,7 +226,8 @@ class AgentController {
 
     const agent = await this.agentRepo.revokeApiKey(id, api_key);
 
-    return AppResponse.success(res, { agent }, "API key revoked successfully", statusCode.OK);
+    let responseData = {agent};
+    return AppResponse.success(res, responseData, "API key revoked successfully", statusCode.OK);
   });
 
   // Bulk operations
@@ -244,7 +253,8 @@ class AgentController {
 
     const result = await this.agentRepo.bulkUpdate(ids, update_data);
 
-    return AppResponse.success(res, { result }, "Bulk update completed successfully", statusCode.OK);
+    let responseData = {result};
+    return AppResponse.success(res, responseData, "Bulk update completed successfully", statusCode.OK);
   });
 
   bulkDelete = tryCatchAsync(async (req, res, next) => {
@@ -265,7 +275,8 @@ class AgentController {
 
     const result = await this.agentRepo.bulkDelete(ids);
 
-    return AppResponse.success(res, { result }, "Bulk delete completed successfully", statusCode.OK);
+    let responseData = {result};
+    return AppResponse.success(res, responseData, "Bulk delete completed successfully", statusCode.OK);
   });
 
   // Get agent statistics
@@ -274,7 +285,8 @@ class AgentController {
 
     const stats = await this.agentRepo.getStatistics(accountId);
 
-    return AppResponse.success(res, { statistics: stats }, "Agent statistics retrieved successfully", statusCode.OK);
+    let responseData = {statistics: stats};
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Search agents with filters
@@ -294,10 +306,11 @@ class AgentController {
 
     const result = await this.agentRepo.findWithFilters(filters, options);
 
-    return AppResponse.success(res, {
+    let responseData = {
       agents: result.agents,
       pagination: result.pagination
-    }, "Agents search completed successfully", statusCode.OK);
+    }
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get agent count
@@ -311,7 +324,8 @@ class AgentController {
 
     const count = await this.agentRepo.countByAccount(accountId, filters);
 
-    return AppResponse.success(res, { count }, "Agent count retrieved successfully", statusCode.OK);
+    let responseData = {count};
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Check agent availability
@@ -327,12 +341,13 @@ class AgentController {
 
     const isAvailable = agent.isAvailable();
 
-    return AppResponse.success(res, {
+    let responseData = {
       agent_id: id,
       is_available: isAvailable,
       status: agent.status,
       current_time: new Date().toISOString()
-    }, "Agent availability checked successfully", statusCode.OK);
+    }
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Train agent
@@ -355,7 +370,8 @@ class AgentController {
 
     const agent = await this.agentRepo.update(id, updateData);
 
-    return AppResponse.success(res, { agent }, "Agent training data updated successfully", statusCode.OK);
+    let responseData = {agent};
+    return AppResponse.success(res, responseData, "Agent training data updated successfully", statusCode.OK);
   });
 
   // Deploy agent
@@ -381,7 +397,8 @@ class AgentController {
 
     const agent = await this.agentRepo.update(id, updateData);
 
-    return AppResponse.success(res, { agent }, "Agent deployed successfully", statusCode.OK);
+    let responseData = {agent};
+    return AppResponse.success(res, responseData, "Agent deployed successfully", statusCode.OK);
   });
 }
 
