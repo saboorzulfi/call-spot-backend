@@ -45,7 +45,8 @@ class AgentGroupController {
       throw new AppError("Access denied", 403);
     }
 
-    return AppResponse.success(res, { agent_group: agentGroup }, "Agent group retrieved successfully", statusCode.OK);
+    let responseData = { agent_group: agentGroup };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get all agent groups for account
@@ -70,10 +71,11 @@ class AgentGroupController {
 
     const result = await this.agentGroupRepo.findByAccount(accountId, options);
 
-    return AppResponse.success(res, {
+    let responseData = {
       agent_groups: result.agentGroups,
       pagination: result.pagination
-    }, "Agent groups retrieved successfully", statusCode.OK);
+    }
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Update agent group
@@ -212,7 +214,8 @@ class AgentGroupController {
       return AppResponse.success(res, { agent_group: null }, "No default group found", statusCode.OK);
     }
 
-    return AppResponse.success(res, { agent_group: defaultGroup }, "Default group retrieved successfully", statusCode.OK);
+    let responseData = { agent_group: defaultGroup };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get available groups
@@ -221,7 +224,8 @@ class AgentGroupController {
 
     const availableGroups = await this.agentGroupRepo.findAvailableGroups(accountId);
 
-    return AppResponse.success(res, { agent_groups: availableGroups }, "Available groups retrieved successfully", statusCode.OK);
+    let responseData = { agent_groups: availableGroups };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Update call statistics
@@ -305,7 +309,8 @@ class AgentGroupController {
 
     const stats = await this.agentGroupRepo.getStatistics(accountId);
 
-    return AppResponse.success(res, { statistics: stats }, "Agent group statistics retrieved successfully", statusCode.OK);
+    let responseData = { statistics: stats };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Search agent groups with filters
@@ -347,7 +352,8 @@ class AgentGroupController {
 
     const count = await this.agentGroupRepo.countByAccount(accountId, filters);
 
-    return AppResponse.success(res, { count }, "Agent group count retrieved successfully", statusCode.OK);
+    let responseData = { count };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Check agent group availability
@@ -385,7 +391,8 @@ class AgentGroupController {
       .sort((a, b) => b.call_success_rate - a.call_success_rate)
       .slice(0, parseInt(limit));
 
-    return AppResponse.success(res, { agent_groups: filteredGroups }, "Agent groups by performance retrieved successfully", statusCode.OK);
+    let responseData = { agent_groups: filteredGroups };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get groups by type
@@ -402,10 +409,11 @@ class AgentGroupController {
 
     const result = await this.agentGroupRepo.findByAccount(accountId, { ...options, ...filters });
 
-    return AppResponse.success(res, {
+    let responseData = {
       agent_groups: result.agentGroups,
       pagination: result.pagination
-    }, "Agent groups by type retrieved successfully", statusCode.OK);
+    }
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 }
 

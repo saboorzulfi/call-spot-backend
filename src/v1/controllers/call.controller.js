@@ -259,7 +259,7 @@ class CallController {
       pagination: result.pagination
     };
 
-    return AppResponse.success(res, responseData, "Calls retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // GET /calls/:id - Get call by ID
@@ -278,7 +278,7 @@ class CallController {
       call: CallDTO.fromObject(call)
     };
 
-    return AppResponse.success(res, responseData, "Call retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // PUT /calls/:id - Update call

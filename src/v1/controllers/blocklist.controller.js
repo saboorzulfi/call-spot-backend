@@ -60,7 +60,7 @@ class BlocklistController {
 
     let responseData = { blocklists: BlocklistDTO.fromArray(blocklists) };
 
-    return AppResponse.success(res, responseData, "Blocklist retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // DELETE /block - Delete a blocklist entry

@@ -31,7 +31,7 @@ class IntegrationController {
       Skylead: !!(user.skylead_settings && user.skylead_settings.skylead_integration_key)
     };
 
-    return AppResponse.success(res, integrationStatus, "Integration status retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, integrationStatus, "", statusCode.OK);
 
   });
 
@@ -61,7 +61,7 @@ class IntegrationController {
         throw new AppError(`Unsupported platform: ${platform}`, 400);
     }
 
-    return AppResponse.success(res, result, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, result, "", statusCode.OK);
   });
 }
 

@@ -90,7 +90,7 @@ class CampaignController {
       pagination: result.pagination
     };
 
-    return AppResponse.success(res, responseData, "Campaigns retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // GET /campaigns/:id - Get campaign by ID

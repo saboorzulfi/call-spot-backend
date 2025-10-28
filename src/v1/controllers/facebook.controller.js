@@ -23,7 +23,7 @@ class FacebookController {
 
     const result = await this.facebookService.saveAccessToken(accountId, facebookTokenResponse);
 
-    return AppResponse.success(res, result, "Access token retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, result, "", statusCode.OK);
   });
 
   deleteAccessToken = tryCatchAsync(async (req, res, next) => {
@@ -49,7 +49,7 @@ class FacebookController {
 
     const pages = await this.facebookService.getPages(accountId);
 
-    return AppResponse.success(res, pages, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, pages, "", statusCode.OK);
   });
 
   getForms = tryCatchAsync(async (req, res, next) => {
@@ -62,7 +62,7 @@ class FacebookController {
 
     const forms = await this.facebookService.getForms(page_id, access_token);
 
-    return AppResponse.success(res, forms, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, forms, "", statusCode.OK);
   });
 
   getFormFields = tryCatchAsync(async (req, res, next) => {
@@ -75,7 +75,7 @@ class FacebookController {
 
     const fields = await this.facebookService.getFormFields(form_id, access_token);
 
-    return AppResponse.success(res, fields, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, fields, "", statusCode.OK);
   });
 
   getFacebookUserData = tryCatchAsync(async (req, res, next) => {
@@ -83,7 +83,7 @@ class FacebookController {
 
     const result = await this.facebookService.getFacebookUserData(accountId);
 
-    return AppResponse.success(res, result, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, result, "", statusCode.OK);
   });
 
   getLeads = tryCatchAsync(async (req, res, next) => {
@@ -101,7 +101,7 @@ class FacebookController {
 
     const leads = await this.facebookService.getLeads(form_id, access_token);
 
-    return AppResponse.success(res, leads, "Data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, leads, "", statusCode.OK);
   });
 
   // ** Campaigns **
@@ -170,7 +170,7 @@ class FacebookController {
       pagination: campaigns.pagination
     };
 
-    return AppResponse.success(res, responseData, "Campaigns with Facebook data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   getCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
@@ -185,7 +185,7 @@ class FacebookController {
       facebook_data: campaign.facebook_data
     };
 
-    return AppResponse.success(res, responseData, "Campaign with Facebook data retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
 

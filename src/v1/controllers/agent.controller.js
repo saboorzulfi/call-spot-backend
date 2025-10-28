@@ -138,7 +138,8 @@ class AgentController {
 
     const agents = await this.agentRepo.findAvailableAgents(accountId, agent_type);
 
-    return AppResponse.success(res, { agents }, "Available agents retrieved successfully", statusCode.OK);
+    let responseData = { agents };
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get agents by performance
@@ -153,7 +154,7 @@ class AgentController {
     );
 
     let responseData = { agents };
-    return AppResponse.success(res, responseData, "Agents by performance retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Get agents by availability
@@ -168,7 +169,7 @@ class AgentController {
     const agents = await this.agentRepo.findAvailableByTime(accountId, time, day);
 
     let responseData = { agents };
-    return AppResponse.success(res, responseData, "Available agents by time retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // Update agent performance metrics
