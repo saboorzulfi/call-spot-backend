@@ -305,12 +305,13 @@ class AuthController {
     });
 
     changePassword = tryCatchAsync(async (req, res, next) => {
-        const user = req.account;
-        const { current_password, new_password } = req.body;
+        const userId = req.account._id;
+        const { current_password, confirm_password } = req.body;
 
-        // Verify current password
-        if (!user.password || !current_password) {
-            throw new AppError("Current password is required", 400);
+        // Fetch the full user document
+        const user = await Account.findById(userId);
+        if (!user) {
+            throw new AppError("User not found", 404);
         }
         
         const isCurrentPasswordValid = await bcryptjs.compare(current_password, user.password);
@@ -318,10 +319,10 @@ class AuthController {
             throw new AppError("Current password is incorrect", 400);
         }
 
-        // Hash the new password before updating
-        const hashedPassword = await bcryptjs.hash(new_password, 10);
+        console.log(confirm_password, 'new_password');
 
-        user.password = hashedPassword;
+        // Set the new password - pre-save hook will hash it
+        user.password = confirm_password;
         await user.save();
 
         return AppResponse.success(res, {}, "Password changed successfully", statusCode.OK);

@@ -9,6 +9,7 @@ const facebookRoutes = require("./facebook.routes");
 const integrationRoutes = require("./integration.routes");
 const { isLoggedIn } = require("../middlewares/auth.middleware");
 const AuthController = require("../controllers/auth.controller");
+const { validateChangePassword } = require("../validation/auth/auth.validation");
 const authController = new AuthController();
 
 
@@ -23,7 +24,7 @@ router.use(isLoggedIn);
 // Protected routes (authentication required)
 router.get("/account", authController.getProfile)
 router.put("/account", authController.updateProfile)
-router.post("/change-password", authController.changePassword)
+router.post("/change-password", validateChangePassword, authController.changePassword)
 
 
 
