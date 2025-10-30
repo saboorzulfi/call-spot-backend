@@ -120,10 +120,7 @@ class UltraSimpleCallService {
         });
     }
 
-    /**
-     * Main method: Start calling for a call document
-     * This is the ONLY method you need!
-     */
+
     async startCallingForCall(call) {
         try {
             console.log(`🚀 Starting call: ${call._id}`);
@@ -138,6 +135,7 @@ class UltraSimpleCallService {
             this.activeCalls.set(call._id.toString(), {
                 call_id: call._id,
                 callRecord: call,
+                campaign_id: call.campaign_id,
                 account_id: call.account_id,
                 agent_uuid: null,
                 lead_uuid: null,
@@ -160,6 +158,13 @@ class UltraSimpleCallService {
             const agents = await this.getAvailableAgents(campaign);
             if (agents.length === 0) {
                 await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "No available agents");
+                // Update campaign stats for missed by agent(s)
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
+                return { success: false, reason: "No available agents" };
+            }
+            if (agents.length === 0) {
+                await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "No available agents");
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
                 return { success: false, reason: "No available agents" };
             }
 
@@ -175,15 +180,17 @@ class UltraSimpleCallService {
                 }
                 
                 // If this was a routing error (like invalid number), stop trying agents
-                if (result.stop_trying) {
+            if (result.stop_trying) {
                     console.log(`🛑 Stopping agent attempts due to routing error: ${result.reason}`);
                     await this.updateCallStatus(call._id, call.account_id, "missed", result.reason);
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed");
                     return { success: false, reason: result.reason };
                 }
             }
 
             // All agents failed
             await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "All agents failed");
+            await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
             return { success: false, reason: "All agents failed" };
 
         } catch (error) {
@@ -193,20 +200,14 @@ class UltraSimpleCallService {
         }
     }
 
-    /**
-     * Try calling a single agent
-     */
     async tryAgentCall(call, agent) {
-        let agentUuid = null; // Declare outside try for catch block access
+        let agentUuid = null;
         
         try {
-            // Update call status
             await this.updateCallStatus(call._id, call.account_id, "in-progress", `Calling agent: ${agent.full_name}`);
             
-            // Add agent to call record
             await this.addAgentToCall(call._id, call.account_id, agent._id, "in-progress");
 
-            // Check FreeSWITCH
             if (!this.fsService || !this.fsService.isConnectedToFreeSwitch()) {
                 return { success: false, reason: "FreeSWITCH not available" };
             }
@@ -232,7 +233,10 @@ class UltraSimpleCallService {
             }
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
-            await this.updateAgentStatus(call._id, call.account_id, agent._id, "in-progress");
+            // Mark agent as answered on the call record
+            await this.updateAgentStatus(call._id, call.account_id, agent._id, "answered");
+            // Ensure the Agent model reflects being on a live call
+            await this.updateAgentModelStatus(agent._id, "in-progress");
             await this.updateCallStatus(call._id, call.account_id, "in-progress", `Agent ${agent.full_name} answered, calling lead...`);
 
             // Step 2: Call lead separately, then use uuid_bridge (same as your working test script)
@@ -247,7 +251,11 @@ class UltraSimpleCallService {
             if (!leadUuid) {
                 console.log(`❌ Lead did not answer`);
                 await this.fsService.hangupCall(agentUuid);
+                // Free the agent since lead did not answer
+                await this.updateAgentStatus(call._id, call.account_id, agent._id, "free");
                 await this.updateCallStatus(call._id, call.account_id, "un-answered", "Agent answered but lead did not answer");
+                // Update campaign stats for no_answer immediately
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "un-answered");
                 return { success: false, reason: "Lead did not answer" };
             }
 
@@ -432,6 +440,17 @@ class UltraSimpleCallService {
         if (callInfo && callInfo.account_id) {
             await this.updateCallStatus(callId, callInfo.account_id, finalStatus, finalDescription);
         }
+
+        // Update campaign call stats (total/answered/no_answer/missed)
+        try {
+            const campaignId = callInfo?.campaign_id;
+            const accountId = callInfo?.account_id;
+            if (campaignId && accountId) {
+                await this.updateCampaignCallStats(campaignId, accountId, finalStatus);
+            }
+        } catch (e) {
+            console.error(`Error updating campaign call stats:`, e);
+        }
         
         // Update call with recording URL
         if (recordingUrl && callInfo && callInfo.account_id) {
@@ -450,6 +469,26 @@ class UltraSimpleCallService {
         this.activeCalls.delete(callId);
         
         console.log(`✅ Call ${callId} completed with status: ${finalStatus}`);
+    }
+
+    /**
+     * Update campaign call statistics counters
+     */
+    async updateCampaignCallStats(campaignId, accountId, finalStatus) {
+        try {
+            const inc = { "call_stats.total": 1 };
+            if (finalStatus === "completed") {
+                inc["call_stats.answered"] = 1;
+            } else if (finalStatus === "un-answered") {
+                inc["call_stats.no_answer"] = 1;
+            } else if (finalStatus === "missed" || finalStatus === "missed by agent(s)") {
+                inc["call_stats.missed"] = 1;
+            }
+
+            await this.campaignRepo.updateByIdAndAccount(campaignId, accountId, { $inc: inc, updated_at: new Date() });
+        } catch (error) {
+            console.error(`Error updating campaign (${campaignId}) call stats:`, error);
+        }
     }
 
     /**
@@ -474,12 +513,6 @@ class UltraSimpleCallService {
                     agents.push(...groupAgents);
                 }
             }
-        }
-
-        // If no specific agents, get all active agents for the account
-        if (agents.length === 0) {
-            const result = await this.agentRepo.findByAccount(campaign.account_id, { status: "active" });
-            agents = result?.agents || []; // Handle null/undefined result
         }
 
         // Filter available agents (active and not currently on calls)
@@ -523,7 +556,6 @@ class UltraSimpleCallService {
             await this.callRepo.updateByIdAndAccount(callId, accountId, {
                 "call_status.call_state": status,
                 "call_status.description": description,
-                updated_at: new Date()
             });
             console.log(`📊 Call ${callId} status: ${status}`);
         } catch (error) {
@@ -579,7 +611,6 @@ class UltraSimpleCallService {
 
             await this.callRepo.updateByIdAndAccount(callId, accountId, {
                 agents: agents,
-                updated_at: new Date()
             });
             
             // Also update the agent's status in the agent model

@@ -28,49 +28,42 @@ class CallController {
     return global.ultraSimpleCallService;
   }
 
-  // POST /call/start - Start calling for existing call document
   start = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
     const { call_id } = req.body;
 
-    // Validation
     if (!call_id) {
       throw new AppError("Call ID is required", 400);
     }
 
-    // Get call queue service (creates on-demand if needed)
     const callQueueService = this.getCallQueueService();
 
-    // Find call document by ID
     const call = await this.callRepo.findById(call_id);
     
-    // Verify call belongs to account
     if (call.account_id.toString() !== accountId.toString()) {
       throw new AppError("Access denied", 403);
     }
 
-    // Check if call is already in progress (only block if truly active)
+
     if (call.call_status.call_state === "in-progress") {
       throw new AppError("Call is already in progress", 400);
     }
     
-    // If call is "answered" but has an end time, it's completed and we can start a new one
+
     if (call.call_status.call_state === "answered" && !call.call_details?.end_time) {
       throw new AppError("Call is still active", 400);
     }
     
-    // Allow new calls if previous call is completed
-    if (call.call_status.call_state === "completed") {
-      // Previous call is completed, allow new call
-    }
+    // // Allow new calls if previous call is completed
+    // if (call.call_status.call_state === "completed") {
+    //   // Previous call is completed, allow new call
+    // }
 
-    // Start calling for this call document
     const result = await callQueueService.startCallingForCall(call);
 
     return AppResponse.success(res, result, "Call initiated successfully", statusCode.ACCEPTED);
   });
 
-  // POST /calls/import-call - Import calls from Excel
   importCall = tryCatchAsync(async (req, res, next) => {
     const { widget_key } = req.body;
     const accountId = req.account._id;
@@ -207,7 +200,6 @@ class CallController {
     return AppResponse.success(res, responseData, "Calls imported successfully", statusCode.CREATED);
   });
 
-  // Helper method to process Excel row
   processRow(row) {
     const requiredFields = ["name", "phone"];
     const missingFields = requiredFields.filter(field => !row[field]);
@@ -233,7 +225,6 @@ class CallController {
     };
   }
 
-  // GET /calls - Get all calls for account
   getAll = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
     const { page, limit, search, sortBy, sortOrder, status, source, campaignID, agentID, startDate, endDate } = req.query;
@@ -262,14 +253,12 @@ class CallController {
     return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
-  // GET /calls/:id - Get call by ID
   getById = tryCatchAsync(async (req, res, next) => {
     const { id } = req.params;
     const accountId = req.account._id;
 
     const call = await this.callRepo.findById(id);
 
-    // Check if call belongs to account
     if (call.account_id.toString() !== accountId.toString()) {
       throw new AppError("Access denied", 403);
     }
@@ -281,7 +270,6 @@ class CallController {
     return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
-  // PUT /calls/:id - Update call
   update = tryCatchAsync(async (req, res, next) => {
     const { id } = req.params;
     const accountId = req.account._id;
@@ -296,7 +284,6 @@ class CallController {
     return AppResponse.success(res, responseData, "Call updated successfully", statusCode.OK);
   });
 
-  // DELETE /calls/:id - Delete call
   delete = tryCatchAsync(async (req, res, next) => {
     const { id } = req.params;
     const accountId = req.account._id;
@@ -304,44 +291,6 @@ class CallController {
     await this.callRepo.deleteByIdAndAccount(id, accountId);
 
     return AppResponse.success(res, {}, "Call deleted successfully", statusCode.OK);
-  });
-
-  // GET /call/health - Get call service health status
-  getHealth = tryCatchAsync(async (req, res, next) => {
-    const fsService = global.fsService;
-    
-    const healthStatus = {
-      service: "Call Service",
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      freeswitch: {
-        connected: fsService ? fsService.isConnectedToFreeSwitch() : false,
-        status: fsService && fsService.isConnectedToFreeSwitch() ? "connected" : "disconnected"
-      },
-      call_queue: {
-        initialized: !!global.ultraSimpleCallService,
-        status: global.ultraSimpleCallService ? "active" : "not_initialized",
-        type: "ultra-simple"
-      },
-      features: {
-        call_initiation: true,
-        agent_selection: true,
-        call_bridging: fsService ? fsService.isConnectedToFreeSwitch() : false,
-        status_tracking: true,
-        agent_conflict_prevention: true,
-        on_demand_service: true
-      }
-    };
-
-    // If ultra simple call service is initialized, get its health status
-    if (global.ultraSimpleCallService) {
-      healthStatus.call_queue = {
-        ...healthStatus.call_queue,
-        service_type: "ultra-simple"
-      };
-    }
-
-    return AppResponse.success(res, healthStatus, "Call service health status", statusCode.OK);
   });
 
 }

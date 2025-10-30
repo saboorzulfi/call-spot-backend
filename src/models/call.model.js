@@ -182,21 +182,16 @@ const callSchema = new mongoose.Schema({
 // Auto-increment doc_number
 callSchema.pre("save", async function (next) {
   if (this.isNew) {
-    this.created_at = new Date();
-    this.updated_at = new Date();
     const nextSeq = await AutoIncrement.findOneAndUpdate(
       { name: "call_number" },
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
     this.doc_number = nextSeq.seq;
-  } else {
-    this.updated_at = new Date();
   }
   next();
 });
 
-// Indexes for performance
 callSchema.index({ account_id: 1 });
 callSchema.index({ call_origination_id: 1 });
 callSchema.index({ source_id: 1 });

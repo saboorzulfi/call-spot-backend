@@ -8,17 +8,13 @@ const callController = new CallController();
 // Authentication is handled at v1.routes level
 // All routes now have access to req.account
 
-// Call management endpoints
-router.get("/", callController.getAll);                      // GET /calls
-router.get("/:id", callController.getById);                   // GET /calls/:id
-router.put("/:id", callController.update);                    // PUT /calls/:id
-router.delete("/:id", callController.delete);                 // DELETE /calls/:id
+router.get("/", callController.getAll);
+router.get("/:id", callController.getById);                   
+router.put("/:id", callController.update);                    
+router.delete("/:id", callController.delete);                 
 
-// Start call flow
-router.post("/start", callController.start);                 // POST /call/start
-router.get("/health", callController.getHealth);             // GET /call/health
+router.post("/start", callController.start);
 
-// Import call endpoint (equivalent to Go backend /import-call)
-router.post("/import-call", uploadExcel.single('file'), callController.importCall);  // POST /import-call
+router.post("/import-call", uploadExcel.single('file'), callController.importCall); 
 
 module.exports = router;

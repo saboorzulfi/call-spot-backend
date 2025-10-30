@@ -85,7 +85,7 @@ class CallRepository {
     try {
       const call = await Call.findOneAndUpdate(
         { _id: id, account_id: accountId },
-        { ...updateData, updated_at: new Date() },
+        { ...updateData },
         { new: true, runValidators: true }
       );
 
