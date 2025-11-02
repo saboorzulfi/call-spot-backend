@@ -3,6 +3,7 @@ const Database = require("./database");
 const config = require("./config/config");
 const FreeSwitchService = require("./services/freeswitch.service");
 const CallQueueService = require("./services/call-queue.service");
+const CronService = require("./services/cron.service");
 
 class Server {
   constructor() {
@@ -10,6 +11,7 @@ class Server {
     this.port = Number(config.server.port);
     this.fsService = null;
     this.callQueueService = null;
+    this.cronService = new CronService();
   }
 
   async start() {
@@ -31,6 +33,10 @@ class Server {
 
       // Make FreeSWITCH service globally accessible (even if not connected)
       global.fsService = this.fsService;
+
+      // Initialize cron jobs
+      console.log("⏰ Initializing cron jobs...");
+      this.cronService.start();
 
       // Backend services initialized
       console.log("✅ Backend services initialized");
@@ -114,6 +120,11 @@ class Server {
   async gracefulShutdown() {
     try {
       console.log("🛑 Shutting down gracefully...");
+      
+      // Stop cron jobs
+      console.log("⏰ Stopping cron jobs...");
+      this.cronService.stop();
+      console.log("✅ Cron jobs stopped");
       
       // Disconnect FreeSWITCH
       if (this.fsService && this.fsService.isConnectedToFreeSwitch()) {

@@ -104,6 +104,16 @@ class FacebookController {
     return AppResponse.success(res, leads, "", statusCode.OK);
   });
 
+  // Manual trigger for Facebook leads sync (for testing)
+  syncLeads = tryCatchAsync(async (req, res, next) => {
+    const CronService = require("../../services/cron.service");
+    const cronService = new CronService();
+    
+    await cronService.triggerFacebookSync();
+    
+    return AppResponse.success(res, {}, "Facebook leads sync triggered successfully", statusCode.OK);
+  });
+
   // ** Campaigns **
   updateCampaignWithFacebookData = tryCatchAsync(async (req, res, next) => {
 

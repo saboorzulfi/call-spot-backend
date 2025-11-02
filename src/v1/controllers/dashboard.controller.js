@@ -52,7 +52,7 @@ class DashboardController {
       }
     };
 
-    return AppResponse.success(res, responseData, "Dashboard statistics retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 
   // GET /dashboard/stats/by-campaign - Get stats grouped by campaign
@@ -88,7 +88,7 @@ class DashboardController {
       }
     };
 
-    return AppResponse.success(res, responseData, "Campaign statistics retrieved successfully", statusCode.OK);
+    return AppResponse.success(res, responseData, "", statusCode.OK);
   });
 }
 

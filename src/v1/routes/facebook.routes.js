@@ -12,6 +12,7 @@ router.get("/page", facebookController.getPages);
 router.post("/form", facebookController.getForms);                       
 router.get("/form-fields", facebookController.getFormFields);           
 router.get("/leads", facebookController.getLeads);                      
+router.post("/sync-leads", facebookController.syncLeads);              // Manual trigger for sync
 
 
 router.put("/campaign/:id", facebookController.updateCampaignWithFacebookData); 
