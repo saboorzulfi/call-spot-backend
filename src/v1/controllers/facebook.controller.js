@@ -66,8 +66,13 @@ class FacebookController {
   });
 
   getFormFields = tryCatchAsync(async (req, res, next) => {
-    const { form_id, access_token } = req.query;
+    const { form_id } = req.query;
     const accountId = req.account._id;
+    const account = await this.accountRepo.findById(accountId);
+    if (!account || !account.facebook_access_token)
+      throw new AppError("Account not found or access token not found", 404);
+    
+    const access_token = await decrypt(account.facebook_access_token);
 
     if (!form_id || !access_token) {
       throw new AppError("form_id and access_token are required", 400);
