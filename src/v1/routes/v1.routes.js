@@ -7,6 +7,7 @@ const callRoutes = require("./call.routes");
 const blocklistRoutes = require("./blocklist.routes");
 const facebookRoutes = require("./facebook.routes");
 const integrationRoutes = require("./integration.routes");
+const dashboardRoutes = require("./dashboard.routes");
 const { isLoggedIn } = require("../middlewares/auth.middleware");
 const AuthController = require("../controllers/auth.controller");
 const { validateChangePassword } = require("../validation/auth/auth.validation");
@@ -35,6 +36,7 @@ router.use("/call", callRoutes);
 router.use("/block", blocklistRoutes);
 router.use("/facebook", facebookRoutes);
 router.use("/integration", integrationRoutes);
+router.use("/dashboard", dashboardRoutes);
 
 
 module.exports = router;
