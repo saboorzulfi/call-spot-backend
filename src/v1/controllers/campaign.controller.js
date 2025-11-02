@@ -22,7 +22,7 @@ class CampaignController {
 
     const responseData = {
       campaign: {
-        id: campaign._id,
+        _id: campaign._id,
         doc_number: campaign.doc_number,
         name: campaign.name,
         site_url: campaign.site_url,
@@ -38,9 +38,8 @@ class CampaignController {
         facebook_data: campaign.facebook_data,
         google_widget_data: campaign.google_widget_data,
         custom_fields: campaign.custom_fields,
-        auto_created: campaign.auto_created,
-        created_at: campaign.created_at,
-        updated_at: campaign.updated_at
+        createdAt: campaign.createdAt,
+        updatedAt: campaign.updatedAt
       }
     };
 
@@ -117,7 +116,7 @@ class CampaignController {
 
     const responseData = {
       campaign: {
-        id: campaign._id,
+        _id: campaign._id,
         doc_number: campaign.doc_number,
         name: campaign.name,
         site_url: campaign.site_url,
@@ -133,9 +132,8 @@ class CampaignController {
         facebook_data: campaign.facebook_data,
         google_widget_data: campaign.google_widget_data,
         custom_fields: campaign.custom_fields,
-        auto_created: campaign.auto_created,
-        created_at: campaign.created_at,
-        updated_at: campaign.updated_at
+        created_at: campaign.createdAt,
+        updated_at: campaign.updatedAt
       }
     };
 

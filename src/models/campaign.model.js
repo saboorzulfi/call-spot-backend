@@ -5,7 +5,7 @@ const campaignSchema = new mongoose.Schema({
   doc_number: {
     type: Number
   },
-  
+
   account_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Account",
@@ -61,14 +61,14 @@ const campaignSchema = new mongoose.Schema({
     use_investor_agents: { type: Boolean, default: false },
     investor_agent_groups: [{ type: mongoose.Schema.Types.ObjectId, ref: "AgentGroup" }],
     investor_agents: [{ type: mongoose.Schema.Types.ObjectId, ref: "Agent" }],
-    timezone: { type: String, default: "Asia/Muscat" },
+    timezone: { type: String, default: "(GMT+04:00) Asia/Dubai" },
     working_hours: [{
       day: { type: Number }, // 0-6 (Sunday-Saturday)
       start_time: [{ type: Number }],
       end_time: [{ type: Number }]
     }],
-    call_type: { 
-      type: String, 
+    call_type: {
+      type: String,
       enum: ["CallTypeAll", "CallTypeSequential", "CallTypeRoundRobin", "CallTypeTodayPriority", "CallTypeBlindSequence"],
       default: "CallTypeRoundRobin"
     },
@@ -132,10 +132,6 @@ const campaignSchema = new mongoose.Schema({
     }]
   },
 
-  auto_created: {
-    type: Boolean,
-    default: false
-  },
   deleted_at: {
     type: Date
   }
@@ -144,17 +140,36 @@ const campaignSchema = new mongoose.Schema({
 // Auto-increment doc_number
 campaignSchema.pre("save", async function (next) {
   if (this.isNew) {
-    this.created_at = new Date();
-    this.updated_at = new Date();
     const nextSeq = await AutoIncrement.findOneAndUpdate(
       { name: "campaign_number" },
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
     this.doc_number = nextSeq.seq;
-  } else {
-    this.updated_at = new Date();
+    
+    // Set default working hours if not provided
+    // Sunday (0) to Saturday (6), 10 AM to 6 PM, Dubai timezone
+    if (!this.call_routing) {
+      this.call_routing = {};
+    }
+    
+    if (!this.call_routing.timezone) {
+      this.call_routing.timezone = "(GMT+04:00) Asia/Dubai";
+    }
+    
+    if (!this.call_routing.working_hours || this.call_routing.working_hours.length === 0) {
+      this.call_routing.working_hours = [
+        { day: 0, start_time: [10, 0], end_time: [18, 0] }, // Sunday
+        { day: 1, start_time: [10, 0], end_time: [18, 0] }, // Monday
+        { day: 2, start_time: [10, 0], end_time: [18, 0] }, // Tuesday
+        { day: 3, start_time: [10, 0], end_time: [18, 0] }, // Wednesday
+        { day: 4, start_time: [10, 0], end_time: [18, 0] }, // Thursday
+        { day: 5, start_time: [10, 0], end_time: [18, 0] }, // Friday
+        { day: 6, start_time: [10, 0], end_time: [18, 0] }  // Saturday
+      ];
+    }
   }
+
   next();
 });
 
@@ -162,6 +177,5 @@ campaignSchema.pre("save", async function (next) {
 campaignSchema.index({ account_id: 1 });
 campaignSchema.index({ name: 1 });
 campaignSchema.index({ is_active: 1 });
-campaignSchema.index({ created_at: -1 });
 
 module.exports = mongoose.model("Campaign", campaignSchema);
