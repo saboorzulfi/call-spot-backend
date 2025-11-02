@@ -64,6 +64,27 @@ class CallController {
     return AppResponse.success(res, result, "Call initiated successfully", statusCode.ACCEPTED);
   });
 
+  cancel = tryCatchAsync(async (req, res, next) => {
+    const accountId = req.account._id;
+    const { call_id } = req.body;
+
+    if (!call_id) {
+      throw new AppError("Call ID is required", 400);
+    }
+
+    const callQueueService = this.getCallQueueService();
+
+    const call = await this.callRepo.findById(call_id);
+    
+    if (call.account_id.toString() !== accountId.toString()) {
+      throw new AppError("Access denied", 403);
+    }
+
+    const result = await callQueueService.cancelCall(call_id, accountId);
+
+    return AppResponse.success(res, result, "Call cancelled successfully", statusCode.OK);
+  });
+
   importCall = tryCatchAsync(async (req, res, next) => {
     const { widget_key } = req.body;
     const accountId = req.account._id;

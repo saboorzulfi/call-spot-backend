@@ -229,6 +229,59 @@ class UltraSimpleCallService {
         });
     }
 
+    /**
+     * Cancel an active call
+     */
+    async cancelCall(callId, accountId) {
+        try {
+            console.log(`🚫 Cancelling call: ${callId}`);
+            
+            const callInfo = this.activeCalls.get(callId.toString());
+            
+            if (!callInfo) {
+                throw new AppError("Call is not active or already completed", 404);
+            }
+
+            // Hang up agent if connected
+            if (callInfo.agent_uuid) {
+                console.log(`📞 Hanging up agent: ${callInfo.agent_uuid}`);
+                await this.fsService.hangupCall(callInfo.agent_uuid).catch(err => {
+                    console.log(`⚠️ Could not hangup agent: ${err.message}`);
+                });
+            }
+
+            // Hang up lead if connected
+            if (callInfo.lead_uuid) {
+                console.log(`📞 Hanging up lead: ${callInfo.lead_uuid}`);
+                await this.fsService.hangupCall(callInfo.lead_uuid).catch(err => {
+                    console.log(`⚠️ Could not hangup lead: ${err.message}`);
+                });
+            }
+
+            // Free the agent
+            if (callInfo.agent_id) {
+                await this.updateAgentStatus(callId, accountId, callInfo.agent_id, "free");
+            }
+
+            // Update call status to cancelled
+            await this.updateCallStatus(callId, accountId, "cancelled", "Call was cancelled by user");
+
+            // Update campaign stats (cancelled counts as missed)
+            if (callInfo.campaign_id) {
+                await this.updateCampaignCallStats(callInfo.campaign_id, accountId, "missed");
+            }
+
+            // Remove from active calls
+            await this.activeCalls.delete(callId.toString());
+
+            console.log(`✅ Call ${callId} cancelled successfully`);
+            
+            return { success: true, message: "Call cancelled successfully" };
+        } catch (error) {
+            console.error(`❌ Error cancelling call:`, error);
+            throw error;
+        }
+    }
 
     async startCallingForCall(call) {
         try {
@@ -342,6 +395,13 @@ class UltraSimpleCallService {
             }
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
+            // Track agent pickup time
+            const agentPickupTime = new Date();
+            await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
+                "call_details.agent_pickup_time": agentPickupTime,
+                updated_at: new Date()
+            });
+            
             // Mark agent as answered on the call record
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "answered");
             // Ensure the Agent model reflects being on a live call
@@ -370,6 +430,12 @@ class UltraSimpleCallService {
 
             // callLeadSeparate already handled everything: called lead, waited for answer, and bridged
             // So if we get here with a leadUuid, the call is successful!
+            
+            // Track lead pickup time
+            const leadPickupTime = new Date();
+            await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
+                "call_details.lead_pickup_time": leadPickupTime,
+            });
             
             // IMMEDIATELY store lead_uuid and recording info to track
             if (existingCallInfo) {
@@ -662,10 +728,23 @@ class UltraSimpleCallService {
      */
     async updateCallStatus(callId, accountId, status, description) {
         try {
-            await this.callRepo.updateByIdAndAccount(callId, accountId, {
+            const updateData = {
                 "call_status.call_state": status,
                 "call_status.description": description,
-            });
+            };
+
+            // Set start_time when call first becomes in-progress
+            if (status === "in-progress") {
+                const call = await this.callRepo.findById(callId);
+                // Only set start_time if it hasn't been set yet
+                if (!call.start_time) {
+                    const startTime = new Date();
+                    updateData.start_time = startTime;
+                    updateData["call_details.start_time"] = startTime;
+                }
+            }
+
+            await this.callRepo.updateByIdAndAccount(callId, accountId, updateData);
             console.log(`📊 Call ${callId} status: ${status}`);
         } catch (error) {
             console.error(`Error updating call status:`, error);

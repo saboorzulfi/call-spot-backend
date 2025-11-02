@@ -14,6 +14,7 @@ router.put("/:id", callController.update);
 router.delete("/:id", callController.delete);                 
 
 router.post("/start", callController.start);
+router.post("/cancel", callController.cancel);
 
 router.post("/import-call", uploadExcel.single('file'), callController.importCall); 
 
