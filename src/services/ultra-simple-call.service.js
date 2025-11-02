@@ -5,6 +5,105 @@ const AgentGroupRepository = require("../v1/repositories/agentGroup.repository")
 const FreeSwitchService = require("./freeswitch.service");
 const RecordingUploadService = require("./recording_upload.service");
 const AppError = require("../utils/app_error.util");
+
+// Lightweight ActiveCalls store with optional Redis durability
+class ActiveCallStore {
+    constructor() {
+        this.map = new Map();
+        this.enabled = false;
+        this.ttlSeconds = parseInt(process.env.ACTIVE_CALL_TTL_SECONDS || "43200", 10); // 12h default
+        const redisUrl = process.env.REDIS_URL || process.env.REDIS_CONNECTION_STRING;
+        if (redisUrl) {
+            try {
+                // Lazy require to avoid hard dependency when Redis is not configured
+                // eslint-disable-next-line global-require
+                const redis = require("redis");
+                this.redis = redis.createClient({ url: redisUrl });
+                this.redis.on("error", (err) => {
+                    console.error("Redis error (activeCalls):", err.message);
+                });
+                this.redis.connect().then(() => {
+                    this.enabled = true;
+                    console.log("✅ Redis connected for ActiveCallStore");
+                }).catch((err) => {
+                    console.error("⚠️ Could not connect to Redis for ActiveCallStore:", err.message);
+                });
+            } catch (err) {
+                console.log("ℹ️ Redis client not installed, using in-memory ActiveCallStore only");
+            }
+        }
+    }
+
+    get size() {
+        return this.map.size;
+    }
+
+    async set(callId, value) {
+        this.map.set(callId, value);
+        if (this.enabled && this.redis) {
+            const key = `active_call:${callId}`;
+            try {
+                await this.redis.set(key, JSON.stringify(value), { EX: this.ttlSeconds });
+            } catch (e) {
+                console.error("Redis set error (activeCalls):", e.message);
+            }
+        }
+    }
+
+    get(callId) {
+        return this.map.get(callId);
+    }
+
+    has(callId) {
+        return this.map.has(callId);
+    }
+
+    async delete(callId) {
+        this.map.delete(callId);
+        if (this.enabled && this.redis) {
+            const key = `active_call:${callId}`;
+            try {
+                await this.redis.del(key);
+            } catch (e) {
+                console.error("Redis del error (activeCalls):", e.message);
+            }
+        }
+    }
+
+    keys() {
+        return this.map.keys();
+    }
+
+    // Load any persisted active calls from Redis into memory at boot
+    async loadFromRedis() {
+        if (!this.enabled || !this.redis) return;
+        try {
+            const iter = this.redis.scanIterator({ MATCH: "active_call:*", COUNT: 100 });
+            for await (const key of iter) {
+                const raw = await this.redis.get(key);
+                if (!raw) continue;
+                try {
+                    const value = JSON.parse(raw);
+                    const callId = key.split(":")[1];
+                    if (callId && value) {
+                        this.map.set(callId, value);
+                    }
+                } catch (_) {
+                    // ignore corrupt entries
+                }
+            }
+            if (this.map.size > 0) {
+                console.log(`♻️ Restored ${this.map.size} active calls from Redis`);
+            }
+        } catch (e) {
+            console.error("Redis load error (activeCalls):", e.message);
+        }
+    }
+
+    [Symbol.iterator]() {
+        return this.map[Symbol.iterator]();
+    }
+}
 const Agent = require("../models/agent.model");
 
 class UltraSimpleCallService {
@@ -16,11 +115,21 @@ class UltraSimpleCallService {
         this.fsService = fsService;
         this.recordingUploadService = new RecordingUploadService();
         
-        // Simple tracking - just active calls
-        this.activeCalls = new Map();
+        // Active calls with optional Redis durability
+        this.activeCalls = new ActiveCallStore();
         
         // Setup hangup listener
         this.setupHangupListener();
+
+        // Reload any persisted active calls from Redis
+        // and keep agent status cleanup
+        (async () => {
+            try {
+                await this.activeCalls.loadFromRedis();
+            } catch (err) {
+                console.log("Redis preload skipped:", err.message);
+            }
+        })();
         
         // Cleanup on startup
         this.cleanupOnStartup();
