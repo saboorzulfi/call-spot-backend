@@ -108,7 +108,9 @@ const campaignSchema = new mongoose.Schema({
 
   tiktok_data: {
     tiktok_advertiser_id: { type: String },
-    tiktok_form_id: { type: String }
+    tiktok_advertiser_name: { type: String },
+    tiktok_form_id: { type: String },
+    tiktok_form_name: { type: String }
   },
 
   facebook_data: {
