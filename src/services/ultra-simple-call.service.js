@@ -324,12 +324,6 @@ class UltraSimpleCallService {
                 await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
                 return { success: false, reason: "No available agents" };
             }
-            if (agents.length === 0) {
-                await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "No available agents");
-                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
-                return { success: false, reason: "No available agents" };
-            }
-
             // Step 3: Try agents one by one
             for (const agent of agents) {
                 console.log(`📞 Trying agent: ${agent.full_name}`);
@@ -395,18 +389,33 @@ class UltraSimpleCallService {
             }
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
-            // Track agent pickup time
+            
+            // Get call to update agents array
+            const callDoc = await this.callRepo.findById(call._id);
+            const agents = callDoc.agents || [];
+            const agentIndex = agents.findIndex(a => a.id.toString() === agent._id.toString());
+            
+            if (agentIndex !== -1) {
+                agents[agentIndex].last_call_status = "answered";
+            } else {
+                agents.push({
+                    id: agent._id,
+                    last_call_status: "answered"
+                });
+            }
+            
+            // Single combined update: agent pickup time, agent status, call status
             const agentPickupTime = new Date();
             await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
                 "call_details.agent_pickup_time": agentPickupTime,
+                "call_status.call_state": "in-progress",
+                "call_status.description": `Agent ${agent.full_name} answered, calling lead...`,
+                agents: agents,
                 updated_at: new Date()
             });
             
-            // Mark agent as answered on the call record
-            await this.updateAgentStatus(call._id, call.account_id, agent._id, "answered");
-            // Ensure the Agent model reflects being on a live call
+            // Update agent model status (single update)
             await this.updateAgentModelStatus(agent._id, "in-progress");
-            await this.updateCallStatus(call._id, call.account_id, "in-progress", `Agent ${agent.full_name} answered, calling lead...`);
 
             // Step 2: Call lead separately, then use uuid_bridge (same as your working test script)
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
@@ -420,9 +429,27 @@ class UltraSimpleCallService {
             if (!leadUuid) {
                 console.log(`❌ Lead did not answer`);
                 await this.fsService.hangupCall(agentUuid);
-                // Free the agent since lead did not answer
-                await this.updateAgentStatus(call._id, call.account_id, agent._id, "free");
-                await this.updateCallStatus(call._id, call.account_id, "un-answered", "Agent answered but lead did not answer");
+                
+                // Get call to update agents array
+                const callDoc = await this.callRepo.findById(call._id);
+                const agents = callDoc.agents || [];
+                const agentIndex = agents.findIndex(a => a.id.toString() === agent._id.toString());
+                
+                if (agentIndex !== -1) {
+                    agents[agentIndex].last_call_status = "free";
+                }
+                
+                // Single combined update: agent status + call status
+                await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
+                    agents: agents,
+                    "call_status.call_state": "un-answered",
+                    "call_status.description": "Agent answered but lead did not answer",
+                    updated_at: new Date()
+                });
+                
+                // Update agent model status (single update)
+                await this.updateAgentModelStatus(agent._id, "free");
+                
                 // Update campaign stats for no_answer immediately
                 await this.updateCampaignCallStats(call.campaign_id, call.account_id, "un-answered");
                 return { success: false, reason: "Lead did not answer" };
@@ -431,11 +458,8 @@ class UltraSimpleCallService {
             // callLeadSeparate already handled everything: called lead, waited for answer, and bridged
             // So if we get here with a leadUuid, the call is successful!
             
-            // Track lead pickup time
+            // Track lead pickup time and update call status in single update
             const leadPickupTime = new Date();
-            await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
-                "call_details.lead_pickup_time": leadPickupTime,
-            });
             
             // IMMEDIATELY store lead_uuid and recording info to track
             if (existingCallInfo) {
@@ -451,7 +475,14 @@ class UltraSimpleCallService {
             }
 
             console.log(`✅ Bridge established successfully! Agent and lead are now connected and talking.`);
-            await this.updateCallStatus(call._id, call.account_id, "in-progress", "Both parties connected and talking");
+            
+            // Single combined update: lead pickup time + call status
+            await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
+                "call_details.lead_pickup_time": leadPickupTime,
+                "call_status.call_state": "in-progress",
+                "call_status.description": "Both parties connected and talking",
+                updated_at: new Date()
+            });
 
             return { success: true };
 
