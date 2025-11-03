@@ -12,7 +12,7 @@ class ActiveCallStore {
         this.map = new Map();
         this.enabled = false;
         this.ttlSeconds = parseInt(process.env.ACTIVE_CALL_TTL_SECONDS || "43200", 10); // 12h default
-        const redisUrl = process.env.REDIS_URL || process.env.REDIS_CONNECTION_STRING;
+        const redisUrl = process.env.REDIS_URL
         if (redisUrl) {
             try {
                 // Lazy require to avoid hard dependency when Redis is not configured
