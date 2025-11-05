@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const AutoIncrement = require("./autoIncrement.model");
+const PollyService = require("../services/polly.service");
 
 const campaignSchema = new mongoose.Schema({
   doc_number: {
@@ -103,7 +104,8 @@ const campaignSchema = new mongoose.Schema({
   calls: {
     message_enabled: { type: Boolean, default: false },
     message_for_answered_agent: { type: String },
-    polly_voice: { type: String }
+    polly_voice: { type: String },
+    prompt_audio_url: { type: String } // Stored S3 URL of synthesized audio
   },
 
   tiktok_data: {
@@ -170,6 +172,38 @@ campaignSchema.pre("save", async function (next) {
         { day: 6, start_time: [10, 0], end_time: [18, 0] }  // Saturday
       ];
     }
+  }
+
+  // Synthesize agent prompt audio if message is enabled
+  if (this.calls?.message_enabled && this.calls?.message_for_answered_agent) {
+    const messageText = this.calls.message_for_answered_agent.trim();
+    if (messageText) {
+      // Check if message text changed or prompt_audio_url is missing
+      const isModified = this.isModified("calls.message_for_answered_agent") || 
+                        this.isModified("calls.polly_voice") ||
+                        !this.calls.prompt_audio_url;
+      
+      if (isModified) {
+        try {
+          const pollyService = new PollyService();
+          const voiceId = this.calls.polly_voice || "Joanna";
+          const audioUrl = await pollyService.synthesizeToS3(messageText, { voiceId });
+          
+          if (audioUrl) {
+            this.calls.prompt_audio_url = audioUrl;
+            console.log(`✅ Synthesized and saved agent prompt audio: ${audioUrl}`);
+          } else {
+            console.log(`⚠️ Failed to synthesize agent prompt audio`);
+          }
+        } catch (error) {
+          console.error(`❌ Error synthesizing agent prompt:`, error.message);
+          // Don't block save if synthesis fails
+        }
+      }
+    }
+  } else if (this.calls?.message_enabled === false || !this.calls?.message_for_answered_agent) {
+    // Clear prompt URL if message is disabled or text is removed
+    this.calls.prompt_audio_url = undefined;
   }
 
   next();

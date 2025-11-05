@@ -272,12 +272,11 @@ class FreeSwitchService {
         // Bridge the calls using uuid_bridge (same as your working test script)
         console.log(`🔗 Bridging agent (${agentUuid}) <-> lead (${leadUuid})`);
 
-        // Stop the echo on agent side before bridging
+        // Stop any media on agent side before bridging (echo/prompt)
         try {
-            // Stop the echo application without hanging up the call
             await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
         } catch (err) {
-            console.log(`Could not stop echo, continuing with bridge...`);
+            console.log(`Could not stop agent broadcast apps, continuing with bridge...`);
         }
 
         // Now bridge - the lead's audio will replace any existing media
@@ -309,6 +308,35 @@ class FreeSwitchService {
             return { leadUuid, recordingFile };
         } else {
             throw new Error("Bridge failed");
+        }
+    }
+
+    /**
+     * Start looping prompt to the agent leg using HTTP playback.
+     * We rely on uuid_broadcast playback with a looped file_string.
+     */
+    async startAgentPrompt(agentUuid, promptUrl) {
+        if (!agentUuid || !promptUrl) return;
+        try {
+            // Use file_string=loop:<url> to loop the prompt until we stop it
+            const cmd = `uuid_broadcast ${agentUuid} playback::file_string=loop:${promptUrl} aleg`;
+            const res = await this.api(cmd);
+            console.log(`🔊 Started agent prompt loop: ${res.trim()}`);
+        } catch (e) {
+            console.log(`⚠️ Failed to start agent prompt: ${e.message}`);
+        }
+    }
+
+    /**
+     * Stop any currently running broadcast (echo/prompt) on agent leg.
+     */
+    async stopAgentPrompt(agentUuid) {
+        if (!agentUuid) return;
+        try {
+            const res = await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
+            console.log(`🔇 Stopped agent broadcast: ${res.trim()}`);
+        } catch (e) {
+            console.log(`⚠️ Failed to stop agent broadcast: ${e.message}`);
         }
     }
 

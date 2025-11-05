@@ -4,6 +4,7 @@ const CampaignRepository = require("../repositories/campaign.repository");
 const CallRepository = require("../repositories/call.repository");
 const tryCatchAsync = require("../../utils/try_catch.util");
 const statusCode = require("../../utils/status_code.util");
+const PollyService = require("../../services/polly.service");
 
 class CampaignController {
   constructor() {
@@ -188,17 +189,22 @@ class CampaignController {
     console.log("Form data received:", req.body);
     console.log("Files received:", req.files);
 
+    // Get existing campaign once (for access check and comparison)
+    const existingCampaign = await this.campaignRepo.findByIdAndAccount(id, accountId);
+    if (existingCampaign.account_id.toString() !== accountId.toString()) {
+      throw new AppError("Access denied", 403);
+    }
+
     // Extract form fields like Go backend does (PascalCase)
     const {
-      Name, SiteUrl, CompanyName, UnitType, PropertyType, PropertyStatus, PropertyPrice, PropertySize, PropertyBedrooms, PropertyBathrooms, PropertyLocation, PropertyFeatures,
+      Name, SiteUrl, CompanyName, UnitType, 
       TitleColor, SubTextColor, BackgroundColor, FormBackgroundColor, FormButtonColor, FormTextColor, WidgetButtonColor, WidgetButtonIcon, WidgetButtonIconColor, FontFamily, StickyButtonState,
       AiAgentId, Agents, AgentGroups, UseInvestorAgents, InvestorAgents, InvestorAgentGroups, Timezone, WorkingHours, CallType, Keywords, AgentHangup, DisableAgents, TriggerMissed,
-      MessageEnabled, MessageText, MessageDelay, MessageRetryCount, MessageRetryDelay,
+      MessageEnabled, MessageForAnsweredAgent,
       CallEnabled, CallDelay, CallRetryCount, CallRetryDelay, CallRecording, CallTranscription,
       TiktokAdvertiserId, TiktokFormId, TiktokAccessToken, TiktokRefreshToken,
       FacebookPageId, FacebookFormId, FacebookAccessToken, FacebookRefreshToken,
       GoogleFormId, GoogleAccessToken, GoogleRefreshToken,
-      CustomFieldsJsonString,
       is_custom_field_active,
       custom_fields
     } = req.body;
@@ -210,20 +216,21 @@ class CampaignController {
     const updateData = {};
 
     // Update main tab data if provided
-    if (Name || SiteUrl || CompanyName || UnitType || PropertyType || PropertyStatus || PropertyPrice || PropertySize || PropertyBedrooms || PropertyBathrooms || PropertyLocation || PropertyFeatures) {
+    if (Name || SiteUrl || CompanyName || UnitType) {
+    // if (Name || SiteUrl || CompanyName || UnitType || PropertyType || PropertyStatus || PropertyPrice || PropertySize || PropertyBedrooms || PropertyBathrooms || PropertyLocation || PropertyFeatures) {
       updateData.name = Name;
       updateData.site_url = SiteUrl;
       updateData.company_name = CompanyName;
-      if (!updateData.custom_data) updateData.custom_data = {};
-      updateData.custom_data.unit_type = UnitType;
-      updateData.custom_data.property_type = PropertyType;
-      updateData.custom_data.property_status = PropertyStatus;
-      updateData.custom_data.property_price = PropertyPrice;
-      updateData.custom_data.property_size = PropertySize;
-      updateData.custom_data.property_bedrooms = PropertyBedrooms;
-      updateData.custom_data.property_bathrooms = PropertyBathrooms;
-      updateData.custom_data.property_location = PropertyLocation;
-      updateData.custom_data.property_features = PropertyFeatures;
+    // if (!updateData.custom_data) updateData.custom_data = {};
+    //   updateData.custom_data.unit_type = UnitType;
+    //   updateData.custom_data.property_type = PropertyType;
+    //   updateData.custom_data.property_status = PropertyStatus;
+    //   updateData.custom_data.property_price = PropertyPrice;
+    //   updateData.custom_data.property_size = PropertySize;
+    //   updateData.custom_data.property_bedrooms = PropertyBedrooms;
+    //   updateData.custom_data.property_bathrooms = PropertyBathrooms;
+    //   updateData.custom_data.property_location = PropertyLocation;
+    //   updateData.custom_data.property_features = PropertyFeatures;
     }
 
     // Update design data if provided
@@ -268,14 +275,63 @@ class CampaignController {
       updateData.call_routing.trigger_missed = TriggerMissed === 'true';
     }
 
-    // Update texts data if provided
-    if (MessageEnabled || MessageText || MessageDelay || MessageRetryCount || MessageRetryDelay) {
+    // Update texts data if provided (for widget messages)
+    if (MessageEnabled !== undefined) {
       if (!updateData.texts) updateData.texts = {};
-      updateData.texts.message_enabled = MessageEnabled === 'true';
-      updateData.texts.message_text = MessageText;
-      updateData.texts.message_delay = parseInt(MessageDelay) || 0;
-      updateData.texts.message_retry_count = parseInt(MessageRetryCount) || 0;
-      updateData.texts.message_retry_delay = parseInt(MessageRetryDelay) || 0;
+      updateData.texts.message_enabled = MessageEnabled === 'true' || MessageEnabled === true;
+    }
+
+    // Update calls data for agent prompt (message_for_answered_agent)
+    if (MessageEnabled !== undefined || MessageForAnsweredAgent !== undefined) {
+      const existingCalls = existingCampaign?.calls || {};
+      
+      if (!updateData.calls) updateData.calls = {};
+      
+      // Map MessageEnabled to calls.message_enabled
+      if (MessageEnabled !== undefined) {
+        updateData.calls.message_enabled = MessageEnabled === 'true' || MessageEnabled === true;
+      }
+      
+      // Map MessageForAnsweredAgent to calls.message_for_answered_agent
+      if (MessageForAnsweredAgent !== undefined) {
+        updateData.calls.message_for_answered_agent = MessageForAnsweredAgent;
+      }
+      
+      // Determine current values (use updateData if provided, otherwise use existing)
+      const messageEnabled = updateData.calls.message_enabled ?? existingCalls.message_enabled ?? false;
+      const messageText = (updateData.calls.message_for_answered_agent ?? existingCalls.message_for_answered_agent ?? '').trim();
+      // Use existing voice if available, otherwise default to 'Joanna'
+      const voiceId = existingCalls.polly_voice ?? 'Joanna';
+      
+      // Check if synthesis is needed:
+      // Scenario 1: First time - no existing prompt_audio_url
+      // Scenario 2: Message text changed - re-synthesize with new text
+      const isFirstTime = !existingCalls.prompt_audio_url;
+      const textChanged = MessageForAnsweredAgent !== undefined && MessageForAnsweredAgent !== (existingCalls.message_for_answered_agent || '');
+      
+      const needsSynthesis = messageEnabled && messageText && (isFirstTime || textChanged);
+      
+      if (needsSynthesis) {
+        try {
+          const pollyService = new PollyService();
+          const audioUrl = await pollyService.synthesizeToS3(messageText, { voiceId });
+          
+          if (audioUrl) {
+            updateData.calls.prompt_audio_url = audioUrl;
+            console.log(`✅ Synthesized agent prompt audio: ${audioUrl}${isFirstTime ? ' (first time)' : ' (text changed)'}`);
+          } else {
+            console.log(`⚠️ Failed to synthesize agent prompt audio`);
+          }
+        } catch (error) {
+          console.error(`❌ Error synthesizing agent prompt:`, error.message);
+        }
+      } else if (messageEnabled === false || !messageText) {
+        updateData.calls.prompt_audio_url = undefined;
+        console.log(`🗑️ Cleared prompt audio URL (message disabled or text removed)`);
+      } else if (existingCalls.prompt_audio_url && !updateData.calls.prompt_audio_url) {
+        updateData.calls.prompt_audio_url = existingCalls.prompt_audio_url;
+        console.log(`♻️ Preserved existing prompt audio URL (no changes)`);
+      }
     }
 
     // Update calls data if provided
@@ -343,8 +399,8 @@ class CampaignController {
         google_widget_data: campaign.google_widget_data,
         custom_fields: campaign.custom_fields,
         auto_created: campaign.auto_created,
-        created_at: campaign.created_at,
-        updated_at: campaign.updated_at
+        createdAt: campaign.createdAt,
+        updatedAt: campaign.updatedAt
       }
     };
 

@@ -4,6 +4,7 @@ const AgentRepository = require("../v1/repositories/agent.repository");
 const AgentGroupRepository = require("../v1/repositories/agentGroup.repository");
 const FreeSwitchService = require("./freeswitch.service");
 const RecordingUploadService = require("./recording_upload.service");
+const PollyService = require("./polly.service");
 const AppError = require("../utils/app_error.util");
 
 // Lightweight ActiveCalls store with optional Redis durability
@@ -114,6 +115,7 @@ class UltraSimpleCallService {
         this.agentGroupRepo = new AgentGroupRepository();
         this.fsService = fsService;
         this.recordingUploadService = new RecordingUploadService();
+        this.pollyService = new PollyService();
         
         // Active calls with optional Redis durability
         this.activeCalls = new ActiveCallStore();
@@ -389,6 +391,50 @@ class UltraSimpleCallService {
             }
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
+            
+            // Play agent prompt (if enabled) while waiting for lead
+            try {
+                // Stop echo first so the agent hears only the prompt
+                await this.fsService.stopAgentPrompt(agentUuid).catch(() => {});
+
+                // Fetch campaign to check message settings
+                const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
+                const msgCfg = campaignForPrompt?.calls;
+                
+                // Use stored prompt_audio_url from campaign (synthesized on save)
+                if (msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
+                    const promptUrl = msgCfg.prompt_audio_url;
+                    console.log(`🔊 Playing stored agent prompt: ${promptUrl}`);
+                    
+                    // Start looping prompt to agent until we bridge
+                    await this.fsService.startAgentPrompt(agentUuid, promptUrl);
+                    
+                    // Track it in activeCalls in case we need to reference/stop later
+                    const info = this.activeCalls.get(call._id.toString());
+                    if (info) {
+                        info.agent_prompt_url = promptUrl;
+                        await this.activeCalls.set(call._id.toString(), info);
+                    }
+                } else if (msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
+                    // Fallback: synthesize on-the-fly if URL is missing (shouldn't happen normally)
+                    console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
+                    const voiceId = msgCfg?.polly_voice || "Joanna";
+                    const promptUrl = await this.pollyService.synthesizeToS3(
+                        msgCfg.message_for_answered_agent,
+                        { voiceId }
+                    );
+                    if (promptUrl) {
+                        await this.fsService.startAgentPrompt(agentUuid, promptUrl);
+                        const info = this.activeCalls.get(call._id.toString());
+                        if (info) {
+                            info.agent_prompt_url = promptUrl;
+                            await this.activeCalls.set(call._id.toString(), info);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log(`⚠️ Agent prompt skipped: ${e.message}`);
+            }
             
             // Get call to update agents array
             const callDoc = await this.callRepo.findById(call._id);
