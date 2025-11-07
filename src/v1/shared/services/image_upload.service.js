@@ -50,6 +50,7 @@ const s3 = new S3Client({
     secretAccessKey: config.storage.s3.bucketSecretKeyId,
   },
 });
+
 const storageS3 = (path) =>
   multerS3({
     s3,

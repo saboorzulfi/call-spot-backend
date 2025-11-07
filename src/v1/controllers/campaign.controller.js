@@ -310,7 +310,7 @@ class CampaignController {
       const textChanged = MessageForAnsweredAgent !== undefined && MessageForAnsweredAgent !== (existingCalls.message_for_answered_agent || '');
       
       const needsSynthesis = messageEnabled && messageText && (isFirstTime || textChanged);
-      
+      console.log("needsSynthesis", needsSynthesis);
       if (needsSynthesis) {
         try {
           const pollyService = new PollyService();

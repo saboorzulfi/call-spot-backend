@@ -21,7 +21,8 @@ router.delete("/:id", campaignController.delete);
 router.patch("/:id", uploadS3("campaigns").fields([
   { name: 'Logo', maxCount: 1 },
   { name: 'BackgroundImage', maxCount: 1 }
-]), campaignController.updateConfigs);
+]),
+ campaignController.updateConfigs);
 
 // Clone campaign
 router.post("/:id/clone", campaignController.clone);

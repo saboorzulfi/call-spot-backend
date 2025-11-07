@@ -5,7 +5,7 @@ const config = {
     port: process.env.SERVER_PORT || 3000,
     nodeEnv: process.env.NODE_ENV || "development",
   },
-  
+  randomCharacters: process.env.RANDOM_CHARACTERS,
   database: {
     uri:  `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@${process.env.MONGO_HOST}/${process.env.MONGO_DBNAME}?retryWrites=true&w=majority`,
 
