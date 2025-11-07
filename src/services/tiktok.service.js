@@ -20,14 +20,18 @@ class TikTokService {
         throw new Error('TikTok OAuth configuration is missing. Please check TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REDIRECT_URI in your .env file');
       }
 
-      // Exchange auth_code for access_token using TikTok OAuth API
-      const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, qs.stringify({
+      const redirectUri = "https://link.spotcalls.com/integrations"; // no trailing slash if not registered
+
+      const body = {
         client_key: config.tiktok.clientKey,
         client_secret: config.tiktok.clientSecret,
-        code: auth_code,
+        code,
         grant_type: "authorization_code",
-        redirect_uri: config.tiktok.redirectUri,
-      }), {
+        redirect_uri: redirectUri,
+      };
+
+      // Exchange auth_code for access_token using TikTok OAuth API
+      const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, qs.stringify(body), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
