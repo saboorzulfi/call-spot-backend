@@ -25,7 +25,7 @@ class TikTokService {
       const body = {
         client_key: config.tiktok.clientKey,
         client_secret: config.tiktok.clientSecret,
-        code,
+        code:auth_code,
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
       };
