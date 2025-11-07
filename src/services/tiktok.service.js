@@ -3,6 +3,8 @@ const AccountRepository = require('../v1/repositories/account.repository');
 const CampaignRepository = require('../v1/repositories/campaign.repository');
 const { encrypt, decrypt } = require('../utils/encryption.util');
 const { maskEmail } = require('../utils/emailMask.util');
+const config = require('../config/config');
+const qs = require("qs"); // <-- helper to encode form data
 
 class TikTokService {
   constructor() {
@@ -11,22 +13,73 @@ class TikTokService {
     this.baseURL = 'https://business-api.tiktok.com/open_api/v1.3';
   }
 
-  async saveAccessToken(accountId, tiktokTokenResponse) {
+  async saveAccessToken(accountId, auth_code) {
     try {
+      // Validate TikTok OAuth configuration
+      if (!config.tiktok.clientKey || !config.tiktok.clientSecret || !config.tiktok.redirectUri) {
+        throw new Error('TikTok OAuth configuration is missing. Please check TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REDIRECT_URI in your .env file');
+      }
+
+      // Exchange auth_code for access_token using TikTok OAuth API
+      const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, qs.stringify({
+        client_key: config.tiktok.clientKey,
+        client_secret: config.tiktok.clientSecret,
+        code: auth_code,
+        grant_type: "authorization_code",
+        redirect_uri: config.tiktok.redirectUri,
+      }), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+      console.log("tokenResponse", tokenResponse)
+      if (!tokenResponse.data || !tokenResponse.data.data) {
+        throw new Error('Invalid response from TikTok OAuth API');
+      }
+
+      const { access_token, refresh_token, expires_in, refresh_expires_in, scope, token_type } = tokenResponse.data.data;
+
+      if (!access_token) {
+        throw new Error('Access token not received from TikTok');
+      }
+
       // Encrypt sensitive data
-      const encryptedAccessToken = await encrypt(tiktokTokenResponse.accessToken);
+      const encryptedAccessToken = await encrypt(access_token);
+      const encryptedRefreshToken = refresh_token ? await encrypt(refresh_token) : null;
+
+      // Get existing account to preserve tiktok_account_data (like advertisers)
+      const existingAccount = await this.accountRepo.findById(accountId);
+      const existingTikTokData = existingAccount?.tiktok_account_data || {};
 
       // Update account with TikTok credentials
-      const account = await this.accountRepo.update(accountId, {
+      const updateData = {
         tiktok_access_token: encryptedAccessToken,
-        tiktok_account_data: {
-          advertisers: tiktokTokenResponse.advertisers || []
-        }
-      });
+      };
+
+      // Store refresh token and token metadata in tiktok_account_data
+      // Preserve existing data like advertisers array
+      updateData.tiktok_account_data = {
+        ...existingTikTokData,
+        ...(encryptedRefreshToken && { refresh_token: encryptedRefreshToken }),
+        expires_in: expires_in,
+        refresh_expires_in: refresh_expires_in,
+        scope: scope,
+        token_type: token_type,
+      };
+
+      const account = await this.accountRepo.update(accountId, updateData);
 
       return account;
     } catch (error) {
       console.error('Error saving TikTok access token:', error);
+
+      // Provide more specific error messages
+      if (error.response) {
+        const errorData = error.response.data;
+        const errorMessage = errorData?.error?.message || errorData?.error_description || error.message;
+        throw new Error(`Failed to exchange TikTok auth code for access token: ${errorMessage}`);
+      }
+
       throw new Error(`Failed to save TikTok access token: ${error.message}`);
     }
   }
@@ -42,7 +95,7 @@ class TikTokService {
       if (!user.tiktok_access_token) {
         return { data: [] }; // Return empty if no TikTok integration
       }
-
+      console.log(user.tiktok_access_token, 'tiktok_access_token');
       // Decrypt TikTok credentials
       const tiktokAccessToken = await decrypt(user.tiktok_access_token);
 

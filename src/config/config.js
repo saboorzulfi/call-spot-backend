@@ -81,6 +81,14 @@ const config = {
       externalRtpIp: '172.31.46.80',
     }
   },
+
+  // TikTok OAuth Configuration
+  tiktok: {
+    clientKey: process.env.TIKTOK_CLIENT_KEY,
+    clientSecret: process.env.TIKTOK_CLIENT_SECRET,
+    redirectUri: process.env.TIKTOK_REDIRECT_URI,
+    oauthTokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+  },
 };
 
 module.exports = config;

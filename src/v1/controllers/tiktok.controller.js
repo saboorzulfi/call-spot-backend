@@ -16,13 +16,13 @@ class TikTokController {
 
   saveAccessToken = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-    const tiktokTokenResponse = req.body;
+    const {auth_code} = req.body;
 
-    if (!tiktokTokenResponse.accessToken) {
+    if (!auth_code) {
       throw new AppError("Access token is required", 400);
     }
 
-    const result = await this.tiktokService.saveAccessToken(accountId, tiktokTokenResponse);
+    const result = await this.tiktokService.saveAccessToken(accountId, auth_code);
 
     return AppResponse.success(res, result, "", statusCode.OK);
   });

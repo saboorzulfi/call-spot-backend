@@ -4,10 +4,11 @@ const statusCode = require("../../utils/status_code.util");
 const tryCatchAsync = require("../../utils/try_catch.util");
 const FacebookService = require("../../services/facebook.service");
 const AccountRepository = require("../repositories/account.repository");
-
+const TikTokService = require("../../services/tiktok.service");
 class IntegrationController {
   constructor() {
     this.facebookService = new FacebookService();
+    this.tiktokService = new TikTokService();
     this.accountRepo = new AccountRepository();
   }
 
@@ -51,9 +52,9 @@ class IntegrationController {
         result = await this.facebookService.getFacebookUserData(accountId);
         break;
       // Future platforms can be added here
-      // case 'tiktok':
-      //   result = await this.tiktokService.getTikTokUserData(accountId);
-      //   break;
+      case 'tiktok':
+        result = await this.tiktokService.getTikTokUserData(accountId);
+        break;
       // case 'google':
       //   result = await this.googleService.getGoogleUserData(accountId);
       //   break;
