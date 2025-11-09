@@ -344,9 +344,19 @@ class UltraSimpleCallService {
             console.log(`🚀 Starting call: ${call._id}`);
             
             // Check if this call is already in progress
-            if (this.activeCalls.has(call._id.toString())) {
-                console.log(`⚠️ Call ${call._id} is already in progress, aborting new call`);
-                return { success: false, reason: "Call already in progress" };
+            // Only block if call is actually active (has agent_uuid or lead_uuid)
+            const existingCallInfo = this.activeCalls.get(call._id.toString());
+            if (existingCallInfo) {
+                // Check if call is actually active (has active channels)
+                const isActive = existingCallInfo.agent_uuid || existingCallInfo.lead_uuid;
+                if (isActive) {
+                    console.log(`⚠️ Call ${call._id} is already in progress (has active channels), aborting new call`);
+                    return { success: false, reason: "Call already in progress" };
+                } else {
+                    // Call exists but no active channels - it's a stale entry, clean it up
+                    console.log(`🧹 Cleaning up stale call entry for ${call._id}`);
+                    await this.activeCalls.delete(call._id.toString());
+                }
             }
             
             // Check if call was already rejected by lead - don't retry
@@ -385,6 +395,8 @@ class UltraSimpleCallService {
                 await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "No available agents");
                 // Update campaign stats for missed by agent(s)
                 await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
+                // Clean up from activeCalls since call failed
+                await this.activeCalls.delete(call._id.toString());
                 return { success: false, reason: "No available agents" };
             }
             // Step 3: Try agents one by one
@@ -403,6 +415,8 @@ class UltraSimpleCallService {
                     console.log(`🛑 Stopping agent attempts due to routing error: ${result.reason}`);
                     await this.updateCallStatus(call._id, call.account_id, "missed", result.reason);
                 await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed");
+                    // Clean up from activeCalls since call failed
+                    await this.activeCalls.delete(call._id.toString());
                     return { success: false, reason: result.reason };
                 }
             }
@@ -410,11 +424,15 @@ class UltraSimpleCallService {
             // All agents failed
             await this.updateCallStatus(call._id, call.account_id, "missed", "All agents failed");
             await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
+            // Clean up from activeCalls since call failed
+            await this.activeCalls.delete(call._id.toString());
             return { success: false, reason: "All agents failed" };
 
         } catch (error) {
             console.error("❌ Call failed:", error);
             await this.updateCallStatus(call._id, call.account_id, "missed", `Error: ${error.message}`);
+            // Clean up from activeCalls on error
+            await this.activeCalls.delete(call._id.toString());
             throw error;
         }
     }
@@ -456,10 +474,13 @@ class UltraSimpleCallService {
                 // Mark that agent didn't answer in call info
                 if (existingCallInfo) {
                     existingCallInfo.agent_answered = false;
+                    existingCallInfo.agent_uuid = null; // Clear agent_uuid since call failed
                     await this.activeCalls.set(call._id.toString(), existingCallInfo);
                 }
                 await this.fsService.hangupCall(agentUuid);
                 await this.updateAgentStatus(call._id, call.account_id, agent._id, "missed");
+                // Note: Don't delete from activeCalls here - let it be cleaned up when all agents fail
+                // or when the call is completed. This allows trying the next agent.
                 return { success: false, reason: "Agent did not answer" };
             }
             
