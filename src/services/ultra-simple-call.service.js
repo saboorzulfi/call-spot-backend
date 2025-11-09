@@ -494,57 +494,57 @@ class UltraSimpleCallService {
             
             // If we used park() (hasPrompt is true), we need to activate the channel first
             // park() keeps the channel alive but doesn't activate the media path
-            if (hasPrompt) {
-                console.log(`🔓 Activating parked channel for prompt playback...`);
-                await this.fsService.activateParkedChannel(agentUuid);
-            }
+            // if (hasPrompt) {
+            //     console.log(`🔓 Activating parked channel for prompt playback...`);
+            //     await this.fsService.activateParkedChannel(agentUuid);
+            // }
             
             // Play agent prompt (if enabled) while waiting for lead
             // Note: If hasPrompt is true, we used park() instead of echo(), so prompt should play cleanly
-            try {
-                // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
-                await this.fsService.stopAgentPrompt(agentUuid);
+            // try {
+            //     // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
+            //     await this.fsService.stopAgentPrompt(agentUuid);
 
-                // Use the campaign we already fetched earlier
-                const msgCfg = campaignForPrompt?.calls;
+            //     // Use the campaign we already fetched earlier
+            //     const msgCfg = campaignForPrompt?.calls;
                 
-                // Use stored prompt_audio_url from campaign (synthesized on save)
-                if (msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
-                    const promptUrl = msgCfg.prompt_audio_url;
-                    console.log(`🔊 Playing stored agent prompt: ${promptUrl}`);
+            //     // Use stored prompt_audio_url from campaign (synthesized on save)
+            //     if (msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
+            //         const promptUrl = msgCfg.prompt_audio_url;
+            //         console.log(`🔊 Playing stored agent prompt: ${promptUrl}`);
                     
-                    // Start looping prompt to agent - it will play continuously
-                    // until the lead answers and we bridge the calls
-                    // Since we didn't use echo() when hasPrompt is true, the prompt will play cleanly
-                    // The prompt loops automatically using file_string=loop: syntax
-                    await this.fsService.startAgentPrompt(agentUuid, promptUrl);
+            //         // Start looping prompt to agent - it will play continuously
+            //         // until the lead answers and we bridge the calls
+            //         // Since we didn't use echo() when hasPrompt is true, the prompt will play cleanly
+            //         // The prompt loops automatically using file_string=loop: syntax
+            //         await this.fsService.startAgentPrompt(agentUuid, promptUrl);
                     
-                    // Track it in activeCalls in case we need to reference/stop later
-                    const info = this.activeCalls.get(call._id.toString());
-                    if (info) {
-                        info.agent_prompt_url = promptUrl;
-                        await this.activeCalls.set(call._id.toString(), info);
-                    }
-                } else if (msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
-                    // Fallback: synthesize on-the-fly if URL is missing (shouldn't happen normally)
-                    console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
-                    const voiceId = msgCfg?.polly_voice || "Joanna";
-                    const promptUrl = await this.pollyService.synthesizeToS3(
-                        msgCfg.message_for_answered_agent,
-                        { voiceId }
-                    );
-                    if (promptUrl) {
-                        await this.fsService.startAgentPrompt(agentUuid, promptUrl);
-                        const info = this.activeCalls.get(call._id.toString());
-                        if (info) {
-                            info.agent_prompt_url = promptUrl;
-                            await this.activeCalls.set(call._id.toString(), info);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log(`⚠️ Agent prompt skipped: ${e.message}`);
-            }
+            //         // Track it in activeCalls in case we need to reference/stop later
+            //         const info = this.activeCalls.get(call._id.toString());
+            //         if (info) {
+            //             info.agent_prompt_url = promptUrl;
+            //             await this.activeCalls.set(call._id.toString(), info);
+            //         }
+            //     } else if (msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
+            //         // Fallback: synthesize on-the-fly if URL is missing (shouldn't happen normally)
+            //         console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
+            //         const voiceId = msgCfg?.polly_voice || "Joanna";
+            //         const promptUrl = await this.pollyService.synthesizeToS3(
+            //             msgCfg.message_for_answered_agent,
+            //             { voiceId }
+            //         );
+            //         if (promptUrl) {
+            //             await this.fsService.startAgentPrompt(agentUuid, promptUrl);
+            //             const info = this.activeCalls.get(call._id.toString());
+            //             if (info) {
+            //                 info.agent_prompt_url = promptUrl;
+            //                 await this.activeCalls.set(call._id.toString(), info);
+            //             }
+            //         }
+            //     }
+            // } catch (e) {
+            //     console.log(`⚠️ Agent prompt skipped: ${e.message}`);
+            // }
             
             // Get call to update agents array
             const callDoc = await this.callRepo.findById(call._id);
