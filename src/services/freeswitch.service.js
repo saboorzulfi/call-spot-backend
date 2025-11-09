@@ -150,12 +150,14 @@ class FreeSwitchService {
 
         // Call agent - use echo() only if no prompt will be played
         // echo() plays agent's own voice back, which conflicts with prompt playback
+        // When prompt is enabled, use answer() to keep channel active and ready for prompt playback
+        // answer() answers the call and keeps it active without playing any audio
         // When we bridge, the echo/prompt will be replaced with lead's audio
-        const echoApp = useEcho ? "&echo()" : "&park()"; // Use park() if no echo to keep channel alive
+        const echoApp = useEcho ? "&echo()" : "&answer()"; // Use answer() if no echo to keep channel alive and ready for prompt
         const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} ${echoApp}`;
         console.log("🧾 Agent Command:", agentCmd);
         if (!useEcho) {
-            console.log("ℹ️ Not using echo() - prompt will be played instead");
+            console.log("ℹ️ Using answer() instead of echo() - prompt will be played cleanly");
         }
 
         const result = await this.api(agentCmd);
@@ -486,10 +488,10 @@ class FreeSwitchService {
                             const channelState = await this.api(`uuid_dump ${leadUuid}`);
                             if (channelState && !channelState.includes('NONE')) {
                                 resolved = true;
-                                clearTimeout(timer);
+                    clearTimeout(timer);
                                 this.removeListener('channel_answer', answerListener);
                                 this.removeListener('channel_hangup', hangupListener);
-                                console.log(`✅ Lead answered: ${leadUuid}`);
+                    console.log(`✅ Lead answered: ${leadUuid}`);
                                 resolve({ answered: true, rejected: false });
                             }
                         }
