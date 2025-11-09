@@ -463,14 +463,12 @@ class UltraSimpleCallService {
             // Step 2: Get available agents
             const agents = await this.getAvailableAgents(campaign);
             if (agents.length === 0) {
-                await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "No available agents");
-                // Update campaign stats for missed by agent(s)
-                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
-                // Clean up from activeCalls since call failed
+                await this.updateCallStatus(call._id, call.account_id, "missed", "No available agents");
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed");
                 await this.activeCalls.delete(call._id.toString());
                 return { success: false, reason: "No available agents" };
             }
-            // Step 3: Try agents one by one
+
             for (const agent of agents) {
                 console.log(`📞 Trying agent: ${agent.full_name}`);
                 
@@ -481,7 +479,6 @@ class UltraSimpleCallService {
                     return { success: true, agent: agent.full_name };
                 }
                 
-                // If this was a routing error (like invalid number), stop trying agents
             if (result.stop_trying) {
                     console.log(`🛑 Stopping agent attempts due to routing error: ${result.reason}`);
                     await this.updateCallStatus(call._id, call.account_id, "missed", result.reason);
@@ -492,10 +489,8 @@ class UltraSimpleCallService {
                 }
             }
 
-            // All agents failed
             await this.updateCallStatus(call._id, call.account_id, "missed", "All agents failed");
-            await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
-            // Clean up from activeCalls since call failed
+            await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed");
             await this.activeCalls.delete(call._id.toString());
             return { success: false, reason: "All agents failed" };
 
@@ -1123,14 +1118,15 @@ class UltraSimpleCallService {
                 "call_status.description": description,
             };
 
-            // Set start_time when call first becomes in-progress
+            // Set start_time when call first becomes in-progress (when call is being started)
             if (status === "in-progress") {
                 const call = await this.callRepo.findById(callId);
                 // Only set start_time if it hasn't been set yet
-                if (!call.start_time) {
+                if (!call.call_details?.start_time) {
                     const startTime = new Date();
                     updateData.start_time = startTime;
                     updateData["call_details.start_time"] = startTime;
+                    console.log(`⏰ Call start time set: ${startTime.toISOString()}`);
                 }
             }
 
