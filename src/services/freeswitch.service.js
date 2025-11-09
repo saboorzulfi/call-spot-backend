@@ -151,7 +151,7 @@ class FreeSwitchService {
         // Call agent - use echo() only if no prompt will be played
         // echo() plays agent's own voice back, which conflicts with prompt playback
         // When we bridge, the echo/prompt will be replaced with lead's audio
-        const echoApp = useEcho ? "&echo()" : "&echo()"; // Use park() if no echo to keep channel alive
+        const echoApp = useEcho ? "&echo()" : "&park()"; // Use park() if no echo to keep channel alive
         const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} ${echoApp}`;
         console.log("🧾 Agent Command:", agentCmd);
         if (!useEcho) {
