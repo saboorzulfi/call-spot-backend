@@ -15,23 +15,16 @@ class TikTokService {
 
   async saveAccessToken(accountId, auth_code) {
     try {
-      // Validate TikTok OAuth configuration
-      if (!config.tiktok.clientKey || !config.tiktok.clientSecret || !config.tiktok.redirectUri) {
+      if (!config.tiktok.clientKey || !config.tiktok.clientSecret) {
         throw new Error('TikTok OAuth configuration is missing. Please check TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REDIRECT_URI in your .env file');
       }
-
-      const redirectUri = "https://link.spotcalls.com/integrations"; // no trailing slash if not registered
 
       const body = {
         app_id: config.tiktok.clientKey,
         secret: config.tiktok.clientSecret,
         auth_code: auth_code,
-        // grant_type: "authorization_code",
-        // redirect_uri: redirectUri,
       };
 
-      // Exchange auth_code for access_token using TikTok OAuth API
-      // TikTok API expects JSON format, not form-encoded
       const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, body, {
         headers: {
           'Content-Type': 'application/json',
@@ -48,21 +41,16 @@ class TikTokService {
         throw new Error('Access token not received from TikTok');
       }
 
-      // Encrypt sensitive data
       const encryptedAccessToken = await encrypt(access_token);
       const encryptedRefreshToken = refresh_token ? await encrypt(refresh_token) : null;
 
-      // Get existing account to preserve tiktok_account_data (like advertisers)
       const existingAccount = await this.accountRepo.findById(accountId);
       const existingTikTokData = existingAccount?.tiktok_account_data || {};
 
-      // Update account with TikTok credentials
       const updateData = {
         tiktok_access_token: encryptedAccessToken,
       };
 
-      // Store refresh token and token metadata in tiktok_account_data
-      // Preserve existing data like advertisers array
       updateData.tiktok_account_data = {
         ...existingTikTokData,
         ...(encryptedRefreshToken && { refresh_token: encryptedRefreshToken }),
@@ -77,8 +65,6 @@ class TikTokService {
       return account;
     } catch (error) {
       console.error('Error saving TikTok access token:', error);
-
-      // Provide more specific error messages
       if (error.response) {
         const errorData = error.response.data;
         const errorMessage = errorData?.error?.message || errorData?.error_description || error.message;
@@ -93,26 +79,27 @@ class TikTokService {
     try {
       // Get user account with TikTok credentials
       const user = await this.accountRepo.findById(accountId);
-      if (!user) {
+      if (!user) 
         throw new Error('User not found');
-      }
-
-      if (!user.tiktok_access_token) {
-        return { data: [] }; // Return empty if no TikTok integration
-      }
-      console.log(user.tiktok_access_token, 'tiktok_access_token');
-      // Decrypt TikTok credentials
+      
+      if (!user.tiktok_access_token) 
+        return { data: [] };
+      
       const tiktokAccessToken = await decrypt(user.tiktok_access_token);
-
-      // Make API call to TikTok - get advertisers (like Facebook pages)
-      const url = `${this.baseURL}/advertiser/info/`;
+      const url = `${this.baseURL}/oauth2/advertiser/get/`;
+      
+      if (!config.tiktok || !config.tiktok.clientKey) 
+        throw new Error('TikTok app_id (TIKTOK_CLIENT_KEY) is required for getAdvertisers API call');
+      
       const response = await axios.get(url, {
         headers: {
           'Access-Token': tiktokAccessToken,
           'Content-Type': 'application/json'
         },
         params: {
-          fields: '["advertiser_id","advertiser_name"]'
+          app_id: config.tiktok.clientKey,
+          secret: config.tiktok.clientSecret,
+          fields: '["advertiser_id","name"]'
         }
       });
 
@@ -126,7 +113,8 @@ class TikTokService {
 
   async getForms(advertiserId, accessToken) {
     try {
-      const url = `${this.baseURL}/lead/form/list/`;
+      // Use /page/get endpoint with business_type=LEAD_GEN to get lead generation forms
+      const url = `${this.baseURL}/page/get`;
       const response = await axios.get(url, {
         headers: {
           'Access-Token': accessToken,
@@ -134,12 +122,30 @@ class TikTokService {
         },
         params: {
           advertiser_id: advertiserId,
-          page: 1,
-          page_size: 250
+          business_type: 'LEAD_GEN',
+          page_size: 100,
+          page: 1
         }
       });
 
-      return response.data;
+
+      const tiktokData = response.data?.data;
+      if (!tiktokData || !tiktokData.list) {
+        return {
+          list: [],
+          page_info: tiktokData?.page_info || { page: 1, page_size: 100, total_number: 0, total_page: 0 }
+        };
+      }
+
+      const forms = tiktokData.list.map(form => ({
+        page_id: form.page_id,
+        title: form.title,
+      }));
+
+      return {
+        list: forms,
+        page_info: tiktokData.page_info
+      };
     } catch (error) {
       console.error('Error fetching TikTok forms:', error);
       throw new Error(`Failed to fetch TikTok forms: ${error.message}`);

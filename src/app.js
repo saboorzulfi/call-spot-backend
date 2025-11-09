@@ -35,12 +35,12 @@ class App {
     }
 
     // Rate limiting middleware
-    const limiter = rateLimit({
-      windowMs: config.rateLimit.windowMs,
-      max: config.rateLimit.maxRequests,
-      message: "Too many requests from this IP, please try again later.",
-    });
-    this.app.use(limiter);
+      const limiter = rateLimit({
+        windowMs: config.rateLimit.windowMs,
+        max: config.rateLimit.maxRequests,
+        message: "Too many requests from this IP, please try again later.",
+      });
+      this.app.use(limiter);
   }
 
   initializeRoutes() {

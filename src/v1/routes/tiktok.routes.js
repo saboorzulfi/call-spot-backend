@@ -7,7 +7,7 @@ const tiktokController = new TikTokController();
 router.post("/access-token", tiktokController.saveAccessToken);        
 router.delete("/access-token", tiktokController.deleteAccessToken);   
 router.get("/advertiser", tiktokController.getAdvertisers);                       
-router.post("/form", tiktokController.getForms);                       
+router.get("/form", tiktokController.getForms);                       
 router.get("/form-fields", tiktokController.getFormFields);           
 router.get("/leads", tiktokController.getLeads);                      
 
