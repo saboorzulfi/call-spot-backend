@@ -464,8 +464,8 @@ class UltraSimpleCallService {
 
             // Check if we have a prompt configured - if so, don't use echo()
             const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
-            const msgCfg = campaignForPrompt?.calls;
-            const hasPrompt = msgCfg?.message_enabled && (msgCfg?.prompt_audio_url || msgCfg?.message_for_answered_agent);
+            // const msgCfg = campaignForPrompt?.calls;
+            // const hasPrompt = msgCfg?.message_enabled && (msgCfg?.prompt_audio_url || msgCfg?.message_for_answered_agent);
             
             // Step 1: Call agent (30 seconds timeout)
             // Use echo() only if there's no prompt configured (echo conflicts with prompt playback)
@@ -504,60 +504,36 @@ class UltraSimpleCallService {
                 await this.activeCalls.set(call._id.toString(), existingCallInfo);
             }
 
-            console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
+            console.log(`✅ Agent ${agent.full_name} answered! Starting audio immediately to keep channel alive...`);
             
-            // Always activate the parked channel - park() keeps the channel alive but doesn't activate the media path
-            console.log(`🔓 Activating parked channel...`);
-            await this.fsService.activateParkedChannel(agentUuid);
+            // CRITICAL: Start audio IMMEDIATELY after agent answers to prevent hangup
+            // park() leaves channel idle, so we must start audio right away
+            // Use the campaign we already fetched earlier
+            const msgCfg = campaignForPrompt?.calls;
             
-            // If no prompt, start echo() to keep channel active (agent hears their own voice)
-            // If prompt is enabled, play the prompt instead
-            if (!hasPrompt) {
-                console.log(`🔊 Starting echo() to keep channel active (no prompt configured)`);
+            if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
+                // Start prompt immediately - this keeps channel alive
+                const promptUrl = msgCfg.prompt_audio_url;
+                console.log(`🔊 Starting prompt immediately: ${promptUrl}`);
                 try {
-                    // Start echo() via uuid_exec to keep channel active
-                    // Note: If uuid_exec is not available, the prompt playback below will keep channel active
-                    const echoResult = await this.fsService.api(`uuid_exec ${agentUuid} echo`);
-                    if (echoResult && echoResult.trim().startsWith('+OK')) {
-                        console.log(`✅ Echo started successfully`);
-                    } else {
-                        console.log(`⚠️ Echo command returned: ${echoResult?.trim()}, but continuing anyway`);
-                    }
-                } catch (e) {
-                    console.log(`⚠️ Failed to start echo (this is okay, prompt will keep channel active): ${e.message}`);
-                }
-            }
-            
-            // Play agent prompt (if enabled) while waiting for lead
-            // This keeps the channel active and prevents premature hangups
-            // Since we always use park(), prompt will play cleanly without echo interference
-            try {
-                // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
-                await this.fsService.stopAgentPrompt(agentUuid);
-
-                // Use the campaign we already fetched earlier
-                const msgCfg = campaignForPrompt?.calls;
-                
-                // Use stored prompt_audio_url from campaign (synthesized on save)
-                if (msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
-                    const promptUrl = msgCfg.prompt_audio_url;
-                    console.log(`🔊 Playing stored agent prompt: ${promptUrl}`);
-                    
-                    // Start looping prompt to agent - it will play continuously
-                    // until the lead answers and we bridge the calls
-                    // This keeps the channel active and prevents premature hangups
-                    // The prompt loops automatically using file_string=loop: syntax
                     await this.fsService.startAgentPrompt(agentUuid, promptUrl);
+                    console.log(`✅ Prompt started successfully - channel should stay alive`);
                     
-                    // Track it in activeCalls in case we need to reference/stop later
+                    // Track it in activeCalls
                     const info = this.activeCalls.get(call._id.toString());
                     if (info) {
                         info.agent_prompt_url = promptUrl;
                         await this.activeCalls.set(call._id.toString(), info);
                     }
-                } else if (msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
-                    // Fallback: synthesize on-the-fly if URL is missing (shouldn't happen normally)
-                    console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
+                } catch (e) {
+                    console.log(`⚠️ Failed to start prompt: ${e.message}`);
+                    // Fallback: try echo
+                    await this.startEchoFallback(agentUuid);
+                }
+            } else if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
+                // Synthesize on-the-fly
+                console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
+                try {
                     const voiceId = msgCfg?.polly_voice || "Joanna";
                     const promptUrl = await this.pollyService.synthesizeToS3(
                         msgCfg.message_for_answered_agent,
@@ -570,11 +546,19 @@ class UltraSimpleCallService {
                             info.agent_prompt_url = promptUrl;
                             await this.activeCalls.set(call._id.toString(), info);
                         }
+                    } else {
+                        await this.startEchoFallback(agentUuid);
                     }
+                } catch (e) {
+                    console.log(`⚠️ Failed to synthesize prompt: ${e.message}`);
+                    await this.startEchoFallback(agentUuid);
                 }
-            } catch (e) {
-                console.log(`⚠️ Agent prompt skipped: ${e.message}`);
+            } else {
+                // No prompt - start echo immediately to keep channel alive
+                await this.startEchoFallback(agentUuid);
             }
+            
+            console.log(`📞 Channel is now active, calling lead and bridging...`);
             
             // Get call to update agents array
             const callDoc = await this.callRepo.findById(call._id);
@@ -749,6 +733,44 @@ class UltraSimpleCallService {
             
             await this.updateAgentStatus(call._id, call.account_id, agent._id, "missed");
             return { success: false, reason: error.message };
+        }
+    }
+
+    /**
+     * Start echo() as fallback to keep channel active when no prompt is available
+     */
+    async startEchoFallback(agentUuid) {
+        console.log(`🔊 Starting echo() to keep channel active (no prompt configured)`);
+        try {
+            // Try to start echo() via uuid_exec to keep channel active
+            const echoResult = await this.fsService.api(`uuid_exec ${agentUuid} echo`);
+            if (echoResult && echoResult.trim().startsWith('+OK')) {
+                console.log(`✅ Echo started successfully`);
+                return true;
+            } else {
+                console.log(`⚠️ Echo command returned: ${echoResult?.trim()}`);
+                // Try alternative: play a silent audio file to keep channel alive
+                try {
+                    // Use a very short silent audio or beep to keep channel active
+                    await this.fsService.api(`uuid_broadcast ${agentUuid} playback::tone_stream://%(500,500,480)`);
+                    console.log(`✅ Started tone stream to keep channel alive`);
+                    return true;
+                } catch (e2) {
+                    console.log(`⚠️ Failed to start tone stream: ${e2.message}`);
+                    return false;
+                }
+            }
+        } catch (e) {
+            console.log(`⚠️ Failed to start echo: ${e.message}`);
+            // Try alternative: play a silent audio file to keep channel alive
+            try {
+                await this.fsService.api(`uuid_broadcast ${agentUuid} playback::tone_stream://%(500,500,480)`);
+                console.log(`✅ Started tone stream as fallback`);
+                return true;
+            } catch (e2) {
+                console.log(`⚠️ Failed to start tone stream: ${e2.message}`);
+                return false;
+            }
         }
     }
 
