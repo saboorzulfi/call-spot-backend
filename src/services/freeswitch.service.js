@@ -148,15 +148,13 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Always use park() to ensure call rings through properly
-        // park() keeps the channel alive while call rings through
-        // After agent answers, we'll activate the channel and either:
-        // - Play prompt (if configured)
-        // - Start echo() via uuid_exec (if no prompt) to keep channel active
-        // When we bridge, the echo/prompt will be replaced with lead's audio
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park()`;
+        // Use hold() instead of park() - hold() works better with media playback
+        // hold() keeps the channel alive while call rings through and allows media
+        // After agent answers, we'll start audio immediately to keep channel active
+        // When we bridge, the audio will be replaced with lead's audio
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &hold()`;
         console.log("🧾 Agent Command:", agentCmd);
-        console.log("ℹ️ Using park() - call will ring through, channel will be activated after agent answers");
+        console.log("ℹ️ Using hold() - call will ring through, channel ready for media after agent answers");
 
         const result = await this.api(agentCmd);
         console.log("📤 Agent originate result:", result.trim());
@@ -356,9 +354,8 @@ class FreeSwitchService {
     }
 
     /**
-     * Activate a parked channel - when agent answers, channel is already active
-     * We just need to verify it exists and is ready for media
-     * No need to execute answer() as channel is already answered
+     * Activate a held channel - when using hold(), channel is already ready for media
+     * Just verify it exists and is ready
      */
     async activateParkedChannel(agentUuid) {
         if (!agentUuid) return;
@@ -370,14 +367,13 @@ class FreeSwitchService {
                 return false;
             }
             
-            // Channel is already answered when agent picks up, no need to execute answer()
-            // Just verify it's ready and give it a moment
-            console.log(`✅ Parked channel ${agentUuid} is active and ready`);
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // With hold(), channel is already ready for media, just verify
+            console.log(`✅ Channel ${agentUuid} is held and ready for media`);
+            await new Promise(resolve => setTimeout(resolve, 50));
             
             return true;
         } catch (err) {
-            console.log(`⚠️ Could not verify parked channel ${agentUuid}:`, err.message);
+            console.log(`⚠️ Could not verify channel ${agentUuid}:`, err.message);
             return false;
         }
     }

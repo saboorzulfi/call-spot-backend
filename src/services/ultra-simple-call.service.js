@@ -542,8 +542,19 @@ class UltraSimpleCallService {
             // CRITICAL: Define callback to start audio IMMEDIATELY when answer is detected
             // This prevents the channel from hanging up due to inactivity
             const startAudioImmediately = async (uuid) => {
-                console.log(`🚨 ANSWER DETECTED! Starting audio IMMEDIATELY to prevent hangup...`);
+                console.log(`🚨 ANSWER DETECTED! Unparking and starting audio IMMEDIATELY to prevent hangup...`);
                 
+                // FIRST: Unpark the channel so it can receive media
+                try {
+                    const unparked = await this.fsService.activateParkedChannel(uuid);
+                    if (!unparked) {
+                        console.log(`⚠️ Failed to unpark channel, but continuing with audio start...`);
+                    }
+                } catch (e) {
+                    console.log(`⚠️ Error unparking channel: ${e.message}, continuing anyway...`);
+                }
+                
+                // THEN: Start audio immediately
                 if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
                     // Start prompt immediately - this keeps channel alive
                     const promptUrl = msgCfg.prompt_audio_url;
