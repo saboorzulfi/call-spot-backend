@@ -79,6 +79,8 @@ const callSchema = new mongoose.Schema({
 
   call_details: {
     start_time: { type: Date },
+    agent_pickup_time: { type: Date },
+    lead_pickup_time: { type: Date },
     end_time: { type: Date },
     duration: { type: Number, default: 0 },
     recording_url: { type: String },
