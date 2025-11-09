@@ -311,7 +311,19 @@ class FreeSwitchService {
             console.log(`⚠️ Could not stop agent broadcast apps, continuing with bridge...`);
         }
 
+        // CRITICAL: Stop echo() if it's running, as it can cause one-way audio
+        try {
+            // Use uuid_break to stop any running applications (like echo)
+            await this.api(`uuid_break ${agentUuid} all`);
+            console.log(`🔇 Stopped all applications on agent channel (including echo)`);
+            // Small delay to ensure applications are stopped
+            await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (err) {
+            console.log(`⚠️ Could not break applications on agent channel: ${err.message}`);
+        }
+
         // Now bridge - the lead's audio will replace any existing media
+        // Use both directions to ensure bidirectional audio
         const bridgeRes = await this.api(`uuid_bridge ${agentUuid} ${leadUuid}`);
         console.log("📤 Bridge result:", bridgeRes.trim());
 

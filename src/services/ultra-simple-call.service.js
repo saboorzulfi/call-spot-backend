@@ -258,7 +258,29 @@ class UltraSimpleCallService {
                 }
             }
             
-            // If not found by UUID and callId is provided, try to find by callId
+            // If not found by UUID, try to find by checking all active calls
+            // Sometimes UUIDs change after bridging, so we need to check all entries
+            if (!foundCallId) {
+                for (const [callIdKey, callInfo] of this.activeCalls) {
+                    // Check if this UUID matches either agent or lead (even if stored differently)
+                    if (callInfo.agent_uuid === uuid || callInfo.lead_uuid === uuid) {
+                        foundCallId = callIdKey;
+                        isLeadHangup = (callInfo.lead_uuid === uuid);
+                        
+                        // Mark as processed
+                        if (!callInfo.hangup_processed) {
+                            callInfo.hangup_processed = true;
+                            await this.activeCalls.set(callIdKey, callInfo);
+                        } else {
+                            console.log(`ℹ️ Hangup for ${uuid} already processed, skipping duplicate`);
+                            return;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // If still not found and callId is provided, try to find by callId
             if (!foundCallId && callId) {
                 if (this.activeCalls.has(callId)) {
                     foundCallId = callId;
@@ -279,18 +301,51 @@ class UltraSimpleCallService {
                 this.handleCallCompleted(foundCallId, cause);
             } else {
                 console.log(`⚠️  Could not find call for hangup uuid ${uuid}`);
+                console.log(`📊 activeCalls entries:`, Array.from(this.activeCalls.entries()).map(([id, info]) => ({
+                    callId: id,
+                    agent_uuid: info.agent_uuid,
+                    lead_uuid: info.lead_uuid
+                })));
             }
         });
 
         // Listen for bridge events
-        this.fsService.addListener('channel_bridge', (data) => {
+        this.fsService.addListener('channel_bridge', async (data) => {
             const { uuid, otherUuid } = data;
             console.log(`🔗 Bridge detected: ${uuid} <-> ${otherUuid}`);
             
             // Find the call and mark it as answered (both connected)
+            // Also update UUIDs in case they changed after bridging
             for (const [callIdKey, callInfo] of this.activeCalls) {
+                let updated = false;
+                
+                // Check if uuid matches agent or lead
+                if (callInfo.agent_uuid === uuid || callInfo.agent_uuid === otherUuid) {
+                    // Update lead_uuid if we have the other UUID
+                    if (!callInfo.lead_uuid) {
+                        callInfo.lead_uuid = (callInfo.agent_uuid === uuid) ? otherUuid : uuid;
+                        updated = true;
+                    }
+                }
+                
+                if (callInfo.lead_uuid === uuid || callInfo.lead_uuid === otherUuid) {
+                    // Update agent_uuid if we have the other UUID
+                    if (!callInfo.agent_uuid) {
+                        callInfo.agent_uuid = (callInfo.lead_uuid === uuid) ? otherUuid : uuid;
+                        updated = true;
+                    }
+                }
+                
+                // If we found a match (either by agent or lead UUID)
                 if (callInfo.agent_uuid === uuid || callInfo.lead_uuid === uuid || 
                     callInfo.agent_uuid === otherUuid || callInfo.lead_uuid === otherUuid) {
+                    
+                    // Save updated UUIDs if changed
+                    if (updated) {
+                        await this.activeCalls.set(callIdKey, callInfo);
+                        console.log(`📝 Updated call ${callIdKey} UUIDs: agent=${callInfo.agent_uuid}, lead=${callInfo.lead_uuid}`);
+                    }
+                    
                     this.handleCallAnswered(callIdKey);
                     break;
                 }
@@ -599,9 +654,24 @@ class UltraSimpleCallService {
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
             console.log(`📞 Dialing lead separately: ${leadNumber}`);
             
+            // Get lead UUID before calling so we can store it immediately
+            // The lead UUID is generated in callLeadSeparateAndBridge, but we need it earlier
+            // So we'll extract it from the result and store it immediately
             let result;
             try {
                 result = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
+                
+                // IMMEDIATELY store lead_uuid when we get it, before bridge completes
+                const leadUuid = result.leadUuid || result;
+                if (leadUuid && typeof leadUuid === 'string') {
+                    const callInfo = this.activeCalls.get(call._id.toString());
+                    if (callInfo) {
+                        callInfo.lead_uuid = leadUuid;
+                        callInfo.lead_number = leadNumber;
+                        await this.activeCalls.set(call._id.toString(), callInfo);
+                        console.log(`📝 Stored lead_uuid ${leadUuid} for call ${call._id.toString()}`);
+                    }
+                }
             } catch (error) {
                 // Check if lead rejected the call
                 if (error.rejected) {
