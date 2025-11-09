@@ -31,12 +31,13 @@ class TikTokService {
       };
 
       // Exchange auth_code for access_token using TikTok OAuth API
-      const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, qs.stringify(body), {
+      // TikTok API expects JSON format, not form-encoded
+      const tokenResponse = await axios.post(config.tiktok.oauthTokenUrl, body, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
       });
-      console.log("tokenResponse", tokenResponse)
+      console.log("tokenResponse", tokenResponse.data)
       if (!tokenResponse.data || !tokenResponse.data.data) {
         throw new Error('Invalid response from TikTok OAuth API');
       }
