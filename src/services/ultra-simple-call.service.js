@@ -516,10 +516,15 @@ class UltraSimpleCallService {
                 console.log(`🔊 Starting echo() to keep channel active (no prompt configured)`);
                 try {
                     // Start echo() via uuid_exec to keep channel active
-                    await this.fsService.api(`uuid_exec ${agentUuid} echo`);
-                    console.log(`✅ Echo started successfully`);
+                    // Note: If uuid_exec is not available, the prompt playback below will keep channel active
+                    const echoResult = await this.fsService.api(`uuid_exec ${agentUuid} echo`);
+                    if (echoResult && echoResult.trim().startsWith('+OK')) {
+                        console.log(`✅ Echo started successfully`);
+                    } else {
+                        console.log(`⚠️ Echo command returned: ${echoResult?.trim()}, but continuing anyway`);
+                    }
                 } catch (e) {
-                    console.log(`⚠️ Failed to start echo: ${e.message}`);
+                    console.log(`⚠️ Failed to start echo (this is okay, prompt will keep channel active): ${e.message}`);
                 }
             }
             

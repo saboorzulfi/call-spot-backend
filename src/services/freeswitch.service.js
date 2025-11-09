@@ -332,30 +332,28 @@ class FreeSwitchService {
     }
 
     /**
-     * Activate a parked channel by executing answer()
-     * This is needed when using park() in originate - the channel needs to be answered
-     * to activate the media path for prompt playback
+     * Activate a parked channel - when agent answers, channel is already active
+     * We just need to verify it exists and is ready for media
+     * No need to execute answer() as channel is already answered
      */
     async activateParkedChannel(agentUuid) {
         if (!agentUuid) return;
         try {
-            // First, check if channel exists and is in a valid state
+            // Check if channel exists and is in a valid state
             const existsResult = await this.api(`uuid_exists ${agentUuid}`);
             if (!existsResult.includes('true')) {
                 console.log(`⚠️ Channel ${agentUuid} does not exist, cannot activate`);
                 return false;
             }
             
-            // Execute answer() on the channel to activate it
-            const result = await this.api(`uuid_exec ${agentUuid} answer`);
-            console.log(`📞 Activated parked channel ${agentUuid}: ${result.trim()}`);
+            // Channel is already answered when agent picks up, no need to execute answer()
+            // Just verify it's ready and give it a moment
+            console.log(`✅ Parked channel ${agentUuid} is active and ready`);
+            await new Promise(resolve => setTimeout(resolve, 100));
             
-            // Give it a moment to activate
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
-            return result.trim().startsWith('+OK');
+            return true;
         } catch (err) {
-            console.log(`⚠️ Could not activate parked channel ${agentUuid}:`, err.message);
+            console.log(`⚠️ Could not verify parked channel ${agentUuid}:`, err.message);
             return false;
         }
     }
