@@ -23,11 +23,11 @@ class TikTokService {
       const redirectUri = "https://link.spotcalls.com/integrations"; // no trailing slash if not registered
 
       const body = {
-        client_key: config.tiktok.clientKey,
-        client_secret: config.tiktok.clientSecret,
-        code: auth_code,
-        grant_type: "authorization_code",
-        redirect_uri: redirectUri,
+        app_id: config.tiktok.clientKey,
+        secret: config.tiktok.clientSecret,
+        auth_code: auth_code,
+        // grant_type: "authorization_code",
+        // redirect_uri: redirectUri,
       };
 
       // Exchange auth_code for access_token using TikTok OAuth API
