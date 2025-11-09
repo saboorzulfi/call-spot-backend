@@ -424,8 +424,14 @@ class UltraSimpleCallService {
                 return { success: false, reason: "FreeSWITCH not available" };
             }
 
+            // Check if we have a prompt configured - if so, don't use echo()
+            const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
+            const msgCfg = campaignForPrompt?.calls;
+            const hasPrompt = msgCfg?.message_enabled && (msgCfg?.prompt_audio_url || msgCfg?.message_for_answered_agent);
+            
             // Step 1: Call agent (30 seconds timeout)
-            agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString());
+            // Use echo() only if there's no prompt configured (echo conflicts with prompt playback)
+            agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString(), !hasPrompt);
             
             // IMMEDIATELY store agent_uuid so hangup events can find this call
             const existingCallInfo = this.activeCalls.get(call._id.toString());
@@ -433,26 +439,38 @@ class UltraSimpleCallService {
                 existingCallInfo.agent_uuid = agentUuid;
                 existingCallInfo.agent_id = agent._id;
                 existingCallInfo.agent_name = agent.full_name;
+                existingCallInfo.agent_answered = false; // Track if agent actually answered
             }
             
             const agentAnswered = await this.fsService.waitForAgentAnswer(agentUuid, 30000);
             
             if (!agentAnswered) {
                 console.log(`❌ Agent ${agent.full_name} did not answer`);
+                // Mark that agent didn't answer in call info
+                if (existingCallInfo) {
+                    existingCallInfo.agent_answered = false;
+                    await this.activeCalls.set(call._id.toString(), existingCallInfo);
+                }
                 await this.fsService.hangupCall(agentUuid);
                 await this.updateAgentStatus(call._id, call.account_id, agent._id, "missed");
                 return { success: false, reason: "Agent did not answer" };
+            }
+            
+            // Mark that agent answered
+            if (existingCallInfo) {
+                existingCallInfo.agent_answered = true;
+                await this.activeCalls.set(call._id.toString(), existingCallInfo);
             }
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
             
             // Play agent prompt (if enabled) while waiting for lead
+            // Note: If hasPrompt is true, we didn't use echo(), so prompt should play cleanly
             try {
                 // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
                 await this.fsService.stopAgentPrompt(agentUuid);
 
-                // Fetch campaign to check message settings
-                const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
+                // Use the campaign we already fetched earlier
                 const msgCfg = campaignForPrompt?.calls;
                 
                 // Use stored prompt_audio_url from campaign (synthesized on save)
@@ -462,7 +480,7 @@ class UltraSimpleCallService {
                     
                     // Start looping prompt to agent - it will play continuously
                     // until the lead answers and we bridge the calls
-                    // The prompt will naturally interrupt the echo() application
+                    // Since we didn't use echo() when hasPrompt is true, the prompt will play cleanly
                     // The prompt loops automatically using file_string=loop: syntax
                     await this.fsService.startAgentPrompt(agentUuid, promptUrl);
                     
@@ -766,9 +784,16 @@ class UltraSimpleCallService {
             await this.updateCallRecording(callId, callInfo.account_id, recordingUrl);
         }
         
-        // Set agent back to free
+        // Set agent back to free ONLY if they actually answered
+        // If agent didn't answer, they should remain as "missed" (already set in tryAgentCall)
         if (callInfo && callInfo.agent_id) {
-            await this.updateAgentStatus(callId, callInfo.account_id, callInfo.agent_id, "free");
+            // Only set to free if agent actually answered (connected to a call)
+            // If agent_answered is false or undefined, they didn't answer, so don't change status
+            if (callInfo.agent_answered === true) {
+                await this.updateAgentStatus(callId, callInfo.account_id, callInfo.agent_id, "free");
+            } else {
+                console.log(`ℹ️ Agent ${callInfo.agent_id} did not answer, keeping status as "missed"`);
+            }
         }
         
         // Update call details with end time

@@ -139,15 +139,24 @@ class FreeSwitchService {
 
     /**
      * Start agent call
+     * @param {string} agentNumber - Agent's phone number
+     * @param {string} callId - Call ID for tracking
+     * @param {boolean} useEcho - Whether to use echo() application (default: true)
+     *                           Set to false when prompt will be played (echo conflicts with prompt)
      */
-    async startAgentCall(agentNumber, callId) {
+    async startAgentCall(agentNumber, callId, useEcho = true) {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent with echo (same as your working test script)
-        // When we bridge, the echo will be replaced with lead's audio
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
+        // Call agent - use echo() only if no prompt will be played
+        // echo() plays agent's own voice back, which conflicts with prompt playback
+        // When we bridge, the echo/prompt will be replaced with lead's audio
+        const echoApp = useEcho ? "&echo()" : "&park()"; // Use park() if no echo to keep channel alive
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} ${echoApp}`;
         console.log("🧾 Agent Command:", agentCmd);
+        if (!useEcho) {
+            console.log("ℹ️ Not using echo() - prompt will be played instead");
+        }
 
         const result = await this.api(agentCmd);
         console.log("📤 Agent originate result:", result.trim());
