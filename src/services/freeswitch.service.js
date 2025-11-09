@@ -328,18 +328,30 @@ class FreeSwitchService {
                 // Ignore if nothing to stop
             }
             
-            // Use file_string=loop:<url> to loop the prompt continuously
+            // Try multiple methods to ensure prompt plays and is audible
+            // Method 1: Use uuid_broadcast with playback and loop
             // The 'loop:' prefix tells FreeSWITCH to loop the file_string indefinitely
             // 'aleg' flag plays to the A leg (agent leg) only
-            // This will keep playing in a loop until we explicitly stop it when bridging
-            const cmd = `uuid_broadcast ${agentUuid} playback::file_string=loop:${promptUrl} aleg`;
-            const res = await this.api(cmd);
+            // Adding 'both' flag to ensure it plays on both directions might help
+            let cmd = `uuid_broadcast ${agentUuid} playback::file_string=loop:${promptUrl} aleg`;
+            let res = await this.api(cmd);
             console.log(`🔊 Started agent prompt loop (will play continuously until lead answers): ${res.trim()}`);
             
             // Verify it started successfully
             if (!res.trim().startsWith('+OK')) {
-                console.log(`⚠️ Prompt may not have started correctly: ${res.trim()}`);
-                throw new Error(`Failed to start prompt: ${res.trim()}`);
+                console.log(`⚠️ uuid_broadcast failed, trying alternative method: ${res.trim()}`);
+                // Fallback: Try using uuid_exec with playback directly
+                try {
+                    cmd = `uuid_exec ${agentUuid} playback file_string://loop:${promptUrl}`;
+                    res = await this.api(cmd);
+                    console.log(`🔊 Started agent prompt using uuid_exec: ${res.trim()}`);
+                    if (!res.trim().startsWith('+OK')) {
+                        throw new Error(`Both methods failed: ${res.trim()}`);
+                    }
+                } catch (e2) {
+                    console.log(`⚠️ Alternative method also failed: ${e2.message}`);
+                    throw new Error(`Failed to start prompt: ${e2.message}`);
+                }
             }
         } catch (e) {
             console.log(`⚠️ Failed to start agent prompt: ${e.message}`);
@@ -438,17 +450,31 @@ class FreeSwitchService {
             const timer = setTimeout(() => {
                 if (!answered) {
                     answered = true;
+                    this.removeListener('channel_answer', listener);
+                    console.log(`⏱️ Lead answer timeout for ${leadUuid}`);
                     resolve(false);
                 }
             }, timeout);
 
-            const listener = (data) => {
+            const listener = async (data) => {
                 if (data.uuid === leadUuid && !answered) {
-                    answered = true;
-                    clearTimeout(timer);
-                    this.removeListener('channel_answer', listener);
-                    console.log(`✅ Lead answered: ${leadUuid}`);
-                    resolve(true);
+                    // Verify the channel is actually answered, not just early media
+                    try {
+                        const channelInfo = await this.api(`uuid_exists ${leadUuid}`);
+                        if (channelInfo.includes('true')) {
+                            // Double-check channel state
+                            const channelState = await this.api(`uuid_dump ${leadUuid}`);
+                            if (channelState && !channelState.includes('NONE')) {
+                                answered = true;
+                                clearTimeout(timer);
+                                this.removeListener('channel_answer', listener);
+                                console.log(`✅ Lead answered: ${leadUuid}`);
+                                resolve(true);
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`⚠️ Error verifying lead answer for ${leadUuid}: ${err.message}`);
+                    }
                 }
             };
 

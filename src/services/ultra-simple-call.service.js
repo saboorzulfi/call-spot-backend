@@ -196,7 +196,7 @@ class UltraSimpleCallService {
     setupHangupListener() {
         if (!this.fsService) return;
 
-        this.fsService.addListener('channel_hangup', (data) => {
+        this.fsService.addListener('channel_hangup', async (data) => {
             const { uuid, cause, callId } = data;
             
             console.log(`📴 Hangup event: uuid=${uuid}, callId=${callId}, cause=${cause}`);
@@ -211,12 +211,22 @@ class UltraSimpleCallService {
                     foundCallId = callIdKey;
                     isLeadHangup = true;
                     
-                    // If lead hung up, also hang up the agent
-                    if (callInfo.agent_uuid) {
-                        console.log(`📞 Hanging up agent because lead hung up`);
-                        this.fsService.hangupCall(callInfo.agent_uuid).catch(err => {
-                            console.log(`⚠️ Could not hangup agent: ${err.message}`);
-                        });
+                    // Mark that we're processing this hangup to prevent duplicates
+                    if (!callInfo.hangup_processed) {
+                        callInfo.hangup_processed = true;
+                        await this.activeCalls.set(callIdKey, callInfo);
+                        
+                        // If lead hung up, also hang up the agent
+                        if (callInfo.agent_uuid) {
+                            console.log(`📞 Hanging up agent because lead hung up`);
+                            this.fsService.hangupCall(callInfo.agent_uuid).catch(err => {
+                                console.log(`⚠️ Could not hangup agent: ${err.message}`);
+                            });
+                        }
+                    } else {
+                        // Already processed, skip
+                        console.log(`ℹ️ Hangup for ${uuid} already processed, skipping duplicate`);
+                        return;
                     }
                     break;
                 }
@@ -224,6 +234,13 @@ class UltraSimpleCallService {
                 // Match by agent UUID
                 if (callInfo.agent_uuid === uuid) {
                     foundCallId = callIdKey;
+                    // Check if already processed (might have been processed as lead hangup)
+                    if (callInfo.hangup_processed) {
+                        console.log(`ℹ️ Hangup for ${uuid} already processed, skipping duplicate`);
+                        return;
+                    }
+                    callInfo.hangup_processed = true;
+                    await this.activeCalls.set(callIdKey, callInfo);
                     break;
                 }
             }
@@ -232,6 +249,14 @@ class UltraSimpleCallService {
             if (!foundCallId && callId) {
                 if (this.activeCalls.has(callId)) {
                     foundCallId = callId;
+                    const callInfo = this.activeCalls.get(callId);
+                    if (callInfo && !callInfo.hangup_processed) {
+                        callInfo.hangup_processed = true;
+                        await this.activeCalls.set(callId, callInfo);
+                    } else if (callInfo && callInfo.hangup_processed) {
+                        console.log(`ℹ️ Hangup for call ${callId} already processed, skipping duplicate`);
+                        return;
+                    }
                 }
             }
             
