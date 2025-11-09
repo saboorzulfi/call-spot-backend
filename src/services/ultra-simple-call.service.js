@@ -470,50 +470,7 @@ class UltraSimpleCallService {
             await this.updateAgentModelStatus(agent._id, "in-progress");
 
             // Step 2: Call lead separately, then use uuid_bridge (same as your working test script)
-            // Extract phone number from lead_data Map - try multiple possible keys
-            let leadNumber = null;
-            if (call.lead_data && typeof call.lead_data.get === 'function') {
-                // It's a Map
-                leadNumber = call.lead_data.get('phone_number') || 
-                            call.lead_data.get('phone') || 
-                            call.lead_data.get('Phone') || 
-                            call.lead_data.get('PhoneNumber');
-            } else if (call.lead_data) {
-                // It's a plain object
-                leadNumber = call.lead_data.phone_number || 
-                        call.lead_data.phone || 
-                        call.lead_data.Phone || 
-                        call.lead_data.PhoneNumber;
-            }
-            
-            // If phone number is still not found, try to get it from the lead by source_id
-            if (!leadNumber && call.source_id && call.source_type === 'import') {
-                try {
-                    const Lead = require('../models/lead.model');
-                    const lead = await Lead.findOne({ 
-                        account_id: call.account_id, 
-                        source_id: call.source_id,
-                        source_type: call.source_type
-                    });
-                    if (lead && lead.phone) {
-                        leadNumber = lead.phone;
-                        // Also update the call's lead_data for future use
-                        if (!call.lead_data) call.lead_data = new Map();
-                        if (typeof call.lead_data.set === 'function') {
-                            call.lead_data.set('phone_number', leadNumber);
-                        } else {
-                            call.lead_data.phone_number = leadNumber;
-                        }
-                    }
-                } catch (err) {
-                    console.error('Error fetching lead phone:', err.message);
-                }
-            }
-            
-            if (!leadNumber) {
-                throw new Error('Lead phone number not found in call data');
-            }
-            
+            const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
             console.log(`📞 Dialing lead separately: ${leadNumber}`);
             const result = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
             
