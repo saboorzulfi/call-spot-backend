@@ -87,7 +87,7 @@ const config = {
     clientKey: process.env.TIKTOK_CLIENT_KEY,
     clientSecret: process.env.TIKTOK_CLIENT_SECRET,
     redirectUri: process.env.TIKTOK_REDIRECT_URI,
-    oauthTokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+    oauthTokenUrl: 'https://open-api.tiktok.com/oauth/access_token/',
   },
 };
 
