@@ -196,7 +196,8 @@ class FacebookController {
 
 
     let responseData = {
-      id: campaign._id,
+      _id: campaign._id,
+      name: campaign.name,
       facebook_data: campaign.facebook_data
     };
 

@@ -183,7 +183,8 @@ class TikTokController {
     const campaign = await this.campaignRepo.findByIdAndAccount(id, accountId);
 
     let responseData = {
-      id: campaign._id,
+      _id: campaign._id,
+      name: campaign.name,
       tiktok_data: campaign.tiktok_data
     };
 
