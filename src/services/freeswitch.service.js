@@ -148,13 +148,13 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Use hold() instead of park() - hold() works better with media playback
-        // hold() keeps the channel alive while call rings through and allows media
+        // Use sleep(0) - this keeps the channel alive without interfering with the call
+        // sleep(0) allows the call to ring through normally and keeps channel active
         // After agent answers, we'll start audio immediately to keep channel active
         // When we bridge, the audio will be replaced with lead's audio
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &hold()`;
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &sleep(0)`;
         console.log("🧾 Agent Command:", agentCmd);
-        console.log("ℹ️ Using hold() - call will ring through, channel ready for media after agent answers");
+        console.log("ℹ️ Using sleep(0) - call will ring through normally, channel ready for media after agent answers");
 
         const result = await this.api(agentCmd);
         console.log("📤 Agent originate result:", result.trim());
