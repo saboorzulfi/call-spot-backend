@@ -456,7 +456,7 @@ class UltraSimpleCallService {
             
             // Step 1: Call agent (30 seconds timeout)
             // Use echo() only if there's no prompt configured (echo conflicts with prompt playback)
-            agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString(), !hasPrompt);
+            agentUuid = await this.fsService.startAgentCall(agent.personal_phone, call._id.toString(), true);
             
             // IMMEDIATELY store agent_uuid so hangup events can find this call
             const existingCallInfo = this.activeCalls.get(call._id.toString());
