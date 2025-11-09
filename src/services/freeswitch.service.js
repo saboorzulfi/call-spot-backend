@@ -148,17 +148,15 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Call agent - use echo() only if no prompt will be played
-        // echo() plays agent's own voice back, which conflicts with prompt playback
-        // When prompt is enabled, use park() to keep channel alive while call rings through
-        // After agent answers, we'll execute answer() to activate the channel, then play prompt
+        // Always use park() to ensure call rings through properly
+        // park() keeps the channel alive while call rings through
+        // After agent answers, we'll activate the channel and either:
+        // - Play prompt (if configured)
+        // - Start echo() via uuid_exec (if no prompt) to keep channel active
         // When we bridge, the echo/prompt will be replaced with lead's audio
-        const echoApp = useEcho ? "&echo()" : "&park()"; // Use park() if no echo - call will ring through
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} ${echoApp}`;
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park()`;
         console.log("🧾 Agent Command:", agentCmd);
-        if (!useEcho) {
-            console.log("ℹ️ Using park() - call will ring through, channel will be activated after agent answers");
-        }
+        console.log("ℹ️ Using park() - call will ring through, channel will be activated after agent answers");
 
         const result = await this.api(agentCmd);
         console.log("📤 Agent originate result:", result.trim());
@@ -341,9 +339,20 @@ class FreeSwitchService {
     async activateParkedChannel(agentUuid) {
         if (!agentUuid) return;
         try {
+            // First, check if channel exists and is in a valid state
+            const existsResult = await this.api(`uuid_exists ${agentUuid}`);
+            if (!existsResult.includes('true')) {
+                console.log(`⚠️ Channel ${agentUuid} does not exist, cannot activate`);
+                return false;
+            }
+            
             // Execute answer() on the channel to activate it
             const result = await this.api(`uuid_exec ${agentUuid} answer`);
             console.log(`📞 Activated parked channel ${agentUuid}: ${result.trim()}`);
+            
+            // Give it a moment to activate
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
             return result.trim().startsWith('+OK');
         } catch (err) {
             console.log(`⚠️ Could not activate parked channel ${agentUuid}:`, err.message);
