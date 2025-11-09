@@ -347,7 +347,7 @@ class UltraSimpleCallService {
             }
 
             // All agents failed
-            await this.updateCallStatus(call._id, call.account_id, "missed by agent(s)", "All agents failed");
+            await this.updateCallStatus(call._id, call.account_id, "missed", "All agents failed");
             await this.updateCampaignCallStats(call.campaign_id, call.account_id, "missed by agent(s)");
             return { success: false, reason: "All agents failed" };
 
