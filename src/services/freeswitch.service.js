@@ -152,7 +152,7 @@ class FreeSwitchService {
         // sleep(0) allows the call to ring through normally and keeps channel active
         // After agent answers, we'll start audio immediately to keep channel active
         // When we bridge, the audio will be replaced with lead's audio
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &sleep(0)`;
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park`;
         console.log("🧾 Agent Command:", agentCmd);
         console.log("ℹ️ Using sleep(0) - call will ring through normally, channel ready for media after agent answers");
 
