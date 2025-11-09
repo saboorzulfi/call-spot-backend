@@ -401,7 +401,9 @@ class UltraSimpleCallService {
             // Play agent prompt (if enabled) while waiting for lead
             try {
                 // Stop echo first so the agent hears only the prompt
-                await this.fsService.stopAgentPrompt(agentUuid).catch(() => {});
+                // Give it a moment to ensure echo is fully stopped
+                await this.fsService.stopAgentPrompt(agentUuid);
+                await new Promise(resolve => setTimeout(resolve, 200)); // Small delay to ensure echo stops
 
                 // Fetch campaign to check message settings
                 const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
@@ -412,7 +414,9 @@ class UltraSimpleCallService {
                     const promptUrl = msgCfg.prompt_audio_url;
                     console.log(`🔊 Playing stored agent prompt: ${promptUrl}`);
                     
-                    // Start looping prompt to agent until we bridge
+                    // Start looping prompt to agent - it will play continuously
+                    // until the lead answers and we bridge the calls
+                    // The prompt loops automatically using file_string=loop: syntax
                     await this.fsService.startAgentPrompt(agentUuid, promptUrl);
                     
                     // Track it in activeCalls in case we need to reference/stop later

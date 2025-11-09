@@ -272,11 +272,13 @@ class FreeSwitchService {
         // Bridge the calls using uuid_bridge (same as your working test script)
         console.log(`🔗 Bridging agent (${agentUuid}) <-> lead (${leadUuid})`);
 
-        // Stop any media on agent side before bridging (echo/prompt)
+        // Stop the looping prompt now that lead has answered
+        // The prompt was playing continuously until this point
         try {
             await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
+            console.log(`🔇 Stopped agent prompt (lead answered, bridging now)`);
         } catch (err) {
-            console.log(`Could not stop agent broadcast apps, continuing with bridge...`);
+            console.log(`⚠️ Could not stop agent broadcast apps, continuing with bridge...`);
         }
 
         // Now bridge - the lead's audio will replace any existing media
@@ -314,29 +316,65 @@ class FreeSwitchService {
     /**
      * Start looping prompt to the agent leg using HTTP playback.
      * We rely on uuid_broadcast playback with a looped file_string.
+     * The 'aleg' flag ensures it plays to the agent leg (not the B leg).
      */
     async startAgentPrompt(agentUuid, promptUrl) {
         if (!agentUuid || !promptUrl) return;
         try {
-            // Use file_string=loop:<url> to loop the prompt until we stop it
+            // Stop any existing playback first to ensure clean start
+            try {
+                await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
+            } catch (e) {
+                // Ignore if nothing to stop
+            }
+            
+            // Use file_string=loop:<url> to loop the prompt continuously
+            // The 'loop:' prefix tells FreeSWITCH to loop the file_string indefinitely
+            // 'aleg' flag plays to the A leg (agent leg) only
+            // This will keep playing in a loop until we explicitly stop it when bridging
             const cmd = `uuid_broadcast ${agentUuid} playback::file_string=loop:${promptUrl} aleg`;
             const res = await this.api(cmd);
-            console.log(`🔊 Started agent prompt loop: ${res.trim()}`);
+            console.log(`🔊 Started agent prompt loop (will play continuously until lead answers): ${res.trim()}`);
+            
+            // Verify it started successfully
+            if (!res.trim().startsWith('+OK')) {
+                console.log(`⚠️ Prompt may not have started correctly: ${res.trim()}`);
+                throw new Error(`Failed to start prompt: ${res.trim()}`);
+            }
         } catch (e) {
             console.log(`⚠️ Failed to start agent prompt: ${e.message}`);
+            throw e; // Re-throw so caller knows it failed
         }
     }
 
     /**
      * Stop any currently running broadcast (echo/prompt) on agent leg.
+     * This stops both echo() application and any uuid_broadcast playback.
      */
     async stopAgentPrompt(agentUuid) {
         if (!agentUuid) return;
         try {
-            const res = await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
-            console.log(`🔇 Stopped agent broadcast: ${res.trim()}`);
+            // First, stop any uuid_broadcast playback
+            const res1 = await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
+            console.log(`🔇 Stopped agent broadcast: ${res1.trim()}`);
+            
+            // Break out of echo() application - this interrupts the current application
+            // The 'all' flag breaks all applications on the channel
+            try {
+                const breakRes = await this.api(`uuid_break ${agentUuid} all`);
+                console.log(`🔇 Stopped echo application: ${breakRes.trim()}`);
+            } catch (e) {
+                // If uuid_break doesn't work, try alternative: execute a no-op to interrupt
+                console.log(`⚠️ uuid_break failed, echo may still be active: ${e.message}`);
+                // Try executing a harmless command to interrupt echo
+                try {
+                    await this.api(`uuid_exec ${agentUuid} sleep 0`);
+                } catch (e2) {
+                    console.log(`⚠️ Alternative echo stop method also failed: ${e2.message}`);
+                }
+            }
         } catch (e) {
-            console.log(`⚠️ Failed to stop agent broadcast: ${e.message}`);
+            console.log(`⚠️ Failed to stop agent prompt/echo: ${e.message}`);
         }
     }
 
