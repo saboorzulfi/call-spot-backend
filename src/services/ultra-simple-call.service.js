@@ -301,7 +301,10 @@ class UltraSimpleCallService {
                 this.handleCallCompleted(foundCallId, cause);
             } else {
                 console.log(`⚠️  Could not find call for hangup uuid ${uuid}`);
-                console.log(`📊 activeCalls entries:`, Array.from(this.activeCalls.entries()).map(([id, info]) => ({
+                // ActiveCallStore is iterable but doesn't have entries() method
+                // Convert iterator to array to get [key, value] pairs
+                const entries = Array.from(this.activeCalls);
+                console.log(`📊 activeCalls entries:`, entries.map(([id, info]) => ({
                     callId: id,
                     agent_uuid: info.agent_uuid,
                     lead_uuid: info.lead_uuid
