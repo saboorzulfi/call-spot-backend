@@ -349,6 +349,13 @@ class UltraSimpleCallService {
                 return { success: false, reason: "Call already in progress" };
             }
             
+            // Check if call was already rejected by lead - don't retry
+            if (call.call_status?.call_state === "un-answered" && 
+                call.call_status?.description?.includes("Lead rejected")) {
+                console.log(`🚫 Call ${call._id} was already rejected by lead, not retrying`);
+                return { success: false, reason: "Lead already rejected this call" };
+            }
+            
             // Store call info for hangup handling (even if call fails early)
             this.activeCalls.set(call._id.toString(), {
                 call_id: call._id,
@@ -541,7 +548,59 @@ class UltraSimpleCallService {
             // Step 2: Call lead separately, then use uuid_bridge (same as your working test script)
             const leadNumber = call.lead_data.get('phone_number') || call.lead_data.phone_number;
             console.log(`📞 Dialing lead separately: ${leadNumber}`);
-            const result = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
+            
+            let result;
+            try {
+                result = await this.fsService.callLeadSeparateAndBridge(agentUuid, leadNumber, call._id.toString());
+            } catch (error) {
+                // Check if lead rejected the call
+                if (error.rejected) {
+                    console.log(`🚫 Lead rejected the call: ${error.cause}`);
+                    
+                    // Mark in activeCalls that lead rejected
+                    const callInfo = this.activeCalls.get(call._id.toString());
+                    if (callInfo) {
+                        callInfo.lead_rejected = true;
+                        callInfo.last_hangup_cause = error.cause;
+                        await this.activeCalls.set(call._id.toString(), callInfo);
+                    }
+                    
+                    await this.fsService.hangupCall(agentUuid);
+                    
+                    // Get call to update agents array
+                    const callDoc = await this.callRepo.findById(call._id);
+                    const agents = callDoc.agents || [];
+                    const agentIndex = agents.findIndex(a => a.id.toString() === agent._id.toString());
+                    
+                    if (agentIndex !== -1) {
+                        agents[agentIndex].last_call_status = "free";
+                    }
+                    
+                    // Single combined update: agent status + call status
+                    // Mark as un-answered with rejection reason to prevent future retries
+                    await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
+                        agents: agents,
+                        "call_status.call_state": "un-answered",
+                        "call_status.description": `Lead rejected the call - ${error.cause}`,
+                        updated_at: new Date()
+                    });
+                    
+                    // Update agent model status (single update)
+                    await this.updateAgentModelStatus(agent._id, "free");
+                    
+                    // Update campaign stats for rejection
+                    await this.updateCampaignCallStats(call.campaign_id, call.account_id, "un-answered");
+                    
+                    // Return with stop_trying flag to prevent retrying
+                    return { 
+                        success: false, 
+                        reason: `Lead rejected the call - ${error.cause}`,
+                        stop_trying: true // Stop trying other agents - lead explicitly rejected
+                    };
+                }
+                // Re-throw other errors
+                throw error;
+            }
             
             // Handle both old and new return formats
             const leadUuid = result.leadUuid || result;

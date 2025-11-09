@@ -273,8 +273,17 @@ class FreeSwitchService {
         }
 
         // Wait for lead to answer
-        const answered = await this.waitForLeadAnswer(leadUuid, 60000);
-        if (!answered) {
+        const result = await this.waitForLeadAnswer(leadUuid, 60000);
+        
+        // If lead rejected, throw a specific error that we can catch and stop retrying
+        if (result.rejected) {
+            const error = new Error(`Lead rejected the call: ${result.cause}`);
+            error.rejected = true;
+            error.cause = result.cause;
+            throw error;
+        }
+        
+        if (!result.answered) {
             throw new Error("Lead did not answer");
         }
 
@@ -451,22 +460,24 @@ class FreeSwitchService {
 
     /**
      * Wait for lead to answer
+     * Returns: { answered: boolean, rejected: boolean, cause?: string }
      */
     waitForLeadAnswer(leadUuid, timeout = 60000) {
         return new Promise((resolve) => {
-            let answered = false;
+            let resolved = false;
 
             const timer = setTimeout(() => {
-                if (!answered) {
-                    answered = true;
-                    this.removeListener('channel_answer', listener);
+                if (!resolved) {
+                    resolved = true;
+                    this.removeListener('channel_answer', answerListener);
+                    this.removeListener('channel_hangup', hangupListener);
                     console.log(`⏱️ Lead answer timeout for ${leadUuid}`);
-                    resolve(false);
+                    resolve({ answered: false, rejected: false });
                 }
             }, timeout);
 
-            const listener = async (data) => {
-                if (data.uuid === leadUuid && !answered) {
+            const answerListener = async (data) => {
+                if (data.uuid === leadUuid && !resolved) {
                     // Verify the channel is actually answered, not just early media
                     try {
                         const channelInfo = await this.api(`uuid_exists ${leadUuid}`);
@@ -474,11 +485,12 @@ class FreeSwitchService {
                             // Double-check channel state
                             const channelState = await this.api(`uuid_dump ${leadUuid}`);
                             if (channelState && !channelState.includes('NONE')) {
-                                answered = true;
+                                resolved = true;
                                 clearTimeout(timer);
-                                this.removeListener('channel_answer', listener);
+                                this.removeListener('channel_answer', answerListener);
+                                this.removeListener('channel_hangup', hangupListener);
                                 console.log(`✅ Lead answered: ${leadUuid}`);
-                                resolve(true);
+                                resolve({ answered: true, rejected: false });
                             }
                         }
                     } catch (err) {
@@ -487,7 +499,34 @@ class FreeSwitchService {
                 }
             };
 
-            this.addListener('channel_answer', listener);
+            const hangupListener = (data) => {
+                if (data.uuid === leadUuid && !resolved) {
+                    const { cause } = data;
+                    // Check if lead rejected the call
+                    const rejectionCauses = ['CALL_REJECTED', 'USER_BUSY', 'NO_ANSWER', 'NO_USER_RESPONSE'];
+                    const isRejected = rejectionCauses.includes(cause);
+                    
+                    if (isRejected) {
+                        resolved = true;
+                        clearTimeout(timer);
+                        this.removeListener('channel_answer', answerListener);
+                        this.removeListener('channel_hangup', hangupListener);
+                        console.log(`🚫 Lead rejected the call: ${leadUuid} (cause: ${cause})`);
+                        resolve({ answered: false, rejected: true, cause });
+                    } else {
+                        // Other hangup causes (like timeout) - just mark as not answered
+                        resolved = true;
+                        clearTimeout(timer);
+                        this.removeListener('channel_answer', answerListener);
+                        this.removeListener('channel_hangup', hangupListener);
+                        console.log(`📴 Lead call ended: ${leadUuid} (cause: ${cause})`);
+                        resolve({ answered: false, rejected: false, cause });
+                    }
+                }
+            };
+
+            this.addListener('channel_answer', answerListener);
+            this.addListener('channel_hangup', hangupListener);
         });
     }
 
