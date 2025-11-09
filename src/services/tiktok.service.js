@@ -152,9 +152,15 @@ class TikTokService {
     }
   }
 
-  async getFormFields(formId, advertiserId, accessToken) {
+  async getFormFields(pageId, advertiserId, accessToken) {
     try {
-      const url = `${this.baseURL}/lead/form/get/`;
+      // Validate required parameters
+      if (!pageId || !advertiserId || !accessToken) {
+        throw new Error('page_id, advertiser_id and access_token are required');
+      }
+
+      // Use /page/field/get endpoint to get form fields
+      const url = `${this.baseURL}/page/field/get`;
       const response = await axios.get(url, {
         headers: {
           'Access-Token': accessToken,
@@ -162,7 +168,7 @@ class TikTokService {
         },
         params: {
           advertiser_id: advertiserId,
-          form_id: formId
+          page_id: pageId // This is the page_id from the forms list
         }
       });
 

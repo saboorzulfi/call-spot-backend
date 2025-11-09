@@ -16,7 +16,7 @@ class TikTokController {
 
   saveAccessToken = tryCatchAsync(async (req, res, next) => {
     const accountId = req.account._id;
-    const {auth_code} = req.body;
+    const { auth_code } = req.body;
 
     if (!auth_code) {
       throw new AppError("Access token is required", 400);
@@ -55,13 +55,13 @@ class TikTokController {
     const { advertiser_id } = req.query;
     const accountId = req.account._id;
 
-    if (!advertiser_id) 
+    if (!advertiser_id)
       throw new AppError("advertiser_id is required", 400);
-    
+
     const account = await this.accountRepo.findById(accountId);
     if (!account || !account.tiktok_access_token)
       throw new AppError("Account not found or access token not found", 404);
-    
+
     const access_token = await decrypt(account.tiktok_access_token);
 
     const forms = await this.tiktokService.getForms(advertiser_id, access_token);
@@ -70,7 +70,7 @@ class TikTokController {
   });
 
   getFormFields = tryCatchAsync(async (req, res, next) => {
-    const { form_id, advertiser_id } = req.query;
+    const { page_id, advertiser_id } = req.query;
     const accountId = req.account._id;
     const account = await this.accountRepo.findById(accountId);
     if (!account || !account.tiktok_access_token)
@@ -78,11 +78,11 @@ class TikTokController {
     
     const access_token = await decrypt(account.tiktok_access_token);
 
-    if (!form_id || !advertiser_id || !access_token) {
-      throw new AppError("form_id, advertiser_id and access_token are required", 400);
+    if (!page_id || !advertiser_id || !access_token) {
+      throw new AppError("page_id, advertiser_id and access_token are required", 400);
     }
 
-    const fields = await this.tiktokService.getFormFields(form_id, advertiser_id, access_token);
+    const fields = await this.tiktokService.getFormFields(page_id, advertiser_id, access_token);
 
     return AppResponse.success(res, fields, "", statusCode.OK);
   });
@@ -101,7 +101,7 @@ class TikTokController {
 
     if (!form_id || !advertiser_id)
       throw new AppError("form_id and advertiser_id are required", 400);
-    
+
     const account = await this.accountRepo.findById(accountId);
     if (!account || !account.tiktok_access_token)
       throw new AppError("Account not found or access token not found", 404);
@@ -131,7 +131,7 @@ class TikTokController {
         tiktok_form_name: tiktok_form_name
       }
     });
-    
+
     let responseData = {
       id: campaign._id,
       tiktok_data: campaign.tiktok_data
