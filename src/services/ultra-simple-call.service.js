@@ -464,8 +464,8 @@ class UltraSimpleCallService {
 
             // Check if we have a prompt configured - if so, don't use echo()
             const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
-            // const msgCfg = campaignForPrompt?.calls;
-            // const hasPrompt = msgCfg?.message_enabled && (msgCfg?.prompt_audio_url || msgCfg?.message_for_answered_agent);
+            const msgCfg = campaignForPrompt?.calls;
+            const hasPrompt = msgCfg?.message_enabled && (msgCfg?.prompt_audio_url || msgCfg?.message_for_answered_agent);
             
             // Step 1: Call agent (30 seconds timeout)
             // Use echo() only if there's no prompt configured (echo conflicts with prompt playback)
@@ -509,7 +509,6 @@ class UltraSimpleCallService {
             // CRITICAL: Start audio IMMEDIATELY after agent answers to prevent hangup
             // park() leaves channel idle, so we must start audio right away
             // Use the campaign we already fetched earlier
-            const msgCfg = campaignForPrompt?.calls;
             
             if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
                 // Start prompt immediately - this keeps channel alive
