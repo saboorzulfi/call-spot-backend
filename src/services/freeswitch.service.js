@@ -150,20 +150,14 @@ class FreeSwitchService {
 
         // Call agent - use echo() only if no prompt will be played
         // echo() plays agent's own voice back, which conflicts with prompt playback
-        // When prompt is enabled, don't use any application - let the call ring through naturally
-        // Once agent answers, we'll play the prompt using uuid_broadcast
+        // When prompt is enabled, use park() to keep channel alive while call rings through
+        // After agent answers, we'll execute answer() to activate the channel, then play prompt
         // When we bridge, the echo/prompt will be replaced with lead's audio
-        let agentCmd;
-        if (useEcho) {
-            // Use echo() when no prompt - agent hears their own voice
-            agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &echo()`;
-        } else {
-            // No application - call will ring through to agent, then we'll play prompt after answer
-            agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber}`;
-        }
+        const echoApp = useEcho ? "&echo()" : "&park()"; // Use park() if no echo - call will ring through
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} ${echoApp}`;
         console.log("🧾 Agent Command:", agentCmd);
         if (!useEcho) {
-            console.log("ℹ️ No application used - call will ring through, prompt will play after agent answers");
+            console.log("ℹ️ Using park() - call will ring through, channel will be activated after agent answers");
         }
 
         const result = await this.api(agentCmd);
@@ -336,6 +330,24 @@ class FreeSwitchService {
             return { leadUuid, recordingFile };
         } else {
             throw new Error("Bridge failed");
+        }
+    }
+
+    /**
+     * Activate a parked channel by executing answer()
+     * This is needed when using park() in originate - the channel needs to be answered
+     * to activate the media path for prompt playback
+     */
+    async activateParkedChannel(agentUuid) {
+        if (!agentUuid) return;
+        try {
+            // Execute answer() on the channel to activate it
+            const result = await this.api(`uuid_exec ${agentUuid} answer`);
+            console.log(`📞 Activated parked channel ${agentUuid}: ${result.trim()}`);
+            return result.trim().startsWith('+OK');
+        } catch (err) {
+            console.log(`⚠️ Could not activate parked channel ${agentUuid}:`, err.message);
+            return false;
         }
     }
 

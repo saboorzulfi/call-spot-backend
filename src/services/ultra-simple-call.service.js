@@ -492,8 +492,15 @@ class UltraSimpleCallService {
 
             console.log(`✅ Agent ${agent.full_name} answered! Calling lead and bridging...`);
             
+            // If we used park() (hasPrompt is true), we need to activate the channel first
+            // park() keeps the channel alive but doesn't activate the media path
+            if (hasPrompt) {
+                console.log(`🔓 Activating parked channel for prompt playback...`);
+                await this.fsService.activateParkedChannel(agentUuid);
+            }
+            
             // Play agent prompt (if enabled) while waiting for lead
-            // Note: If hasPrompt is true, we didn't use echo(), so prompt should play cleanly
+            // Note: If hasPrompt is true, we used park() instead of echo(), so prompt should play cleanly
             try {
                 // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
                 await this.fsService.stopAgentPrompt(agentUuid);
