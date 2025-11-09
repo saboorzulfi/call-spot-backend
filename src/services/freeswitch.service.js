@@ -349,32 +349,21 @@ class FreeSwitchService {
 
     /**
      * Stop any currently running broadcast (echo/prompt) on agent leg.
-     * This stops both echo() application and any uuid_broadcast playback.
+     * Note: We don't try to stop echo() application directly as it can hang up the call.
+     * Instead, we just stop any uuid_broadcast playback. The new prompt playback will
+     * naturally interrupt the echo when it starts.
      */
     async stopAgentPrompt(agentUuid) {
         if (!agentUuid) return;
         try {
-            // First, stop any uuid_broadcast playback
+            // Stop any existing uuid_broadcast playback (like previous prompts)
+            // We don't try to stop echo() as it can cause the call to hang up
+            // The new prompt playback will interrupt echo naturally
             const res1 = await this.api(`uuid_broadcast ${agentUuid} stop:::-1`);
             console.log(`🔇 Stopped agent broadcast: ${res1.trim()}`);
-            
-            // Break out of echo() application - this interrupts the current application
-            // The 'all' flag breaks all applications on the channel
-            try {
-                const breakRes = await this.api(`uuid_break ${agentUuid} all`);
-                console.log(`🔇 Stopped echo application: ${breakRes.trim()}`);
-            } catch (e) {
-                // If uuid_break doesn't work, try alternative: execute a no-op to interrupt
-                console.log(`⚠️ uuid_break failed, echo may still be active: ${e.message}`);
-                // Try executing a harmless command to interrupt echo
-                try {
-                    await this.api(`uuid_exec ${agentUuid} sleep 0`);
-                } catch (e2) {
-                    console.log(`⚠️ Alternative echo stop method also failed: ${e2.message}`);
-                }
-            }
         } catch (e) {
-            console.log(`⚠️ Failed to stop agent prompt/echo: ${e.message}`);
+            // Ignore errors - channel might not have any broadcast running
+            console.log(`ℹ️ No broadcast to stop (this is OK): ${e.message}`);
         }
     }
 

@@ -13,7 +13,26 @@ class ActiveCallStore {
         this.map = new Map();
         this.enabled = false;
         this.ttlSeconds = parseInt(process.env.ACTIVE_CALL_TTL_SECONDS || "43200", 10); // 12h default
-        const redisUrl = process.env.REDIS_URL
+        
+        // Support both REDIS_URL and individual config variables
+        let redisUrl = process.env.REDIS_URL;
+        if (!redisUrl) {
+            // Build Redis URL from individual config variables
+            const redisHost = process.env.REDIS_HOST || "localhost";
+            const redisPort = process.env.REDIS_PORT || 6379;
+            const redisPassword = process.env.REDIS_PASSWORD;
+            const redisDb = process.env.REDIS_DB || 0;
+            
+            if (redisHost && redisPort) {
+                // Format: redis://[password@]host:port[/db]
+                if (redisPassword) {
+                    redisUrl = `redis://:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
+                } else {
+                    redisUrl = `redis://${redisHost}:${redisPort}/${redisDb}`;
+                }
+            }
+        }
+        
         if (redisUrl) {
             try {
                 // Lazy require to avoid hard dependency when Redis is not configured
@@ -25,13 +44,17 @@ class ActiveCallStore {
                 });
                 this.redis.connect().then(() => {
                     this.enabled = true;
-                    console.log("✅ Redis connected for ActiveCallStore");
+                    console.log(`✅ Redis connected for ActiveCallStore (${redisUrl.replace(/:[^:@]+@/, ':****@')})`);
                 }).catch((err) => {
                     console.error("⚠️ Could not connect to Redis for ActiveCallStore:", err.message);
+                    console.error("   Make sure Redis is running and accessible at:", redisUrl.replace(/:[^:@]+@/, ':****@'));
                 });
             } catch (err) {
                 console.log("ℹ️ Redis client not installed, using in-memory ActiveCallStore only");
+                console.log("   To enable Redis, install: npm install redis");
             }
+        } else {
+            console.log("ℹ️ Redis not configured (no REDIS_URL or REDIS_HOST), using in-memory ActiveCallStore only");
         }
     }
 
@@ -400,10 +423,8 @@ class UltraSimpleCallService {
             
             // Play agent prompt (if enabled) while waiting for lead
             try {
-                // Stop echo first so the agent hears only the prompt
-                // Give it a moment to ensure echo is fully stopped
+                // Stop any existing broadcast first (but don't try to stop echo as it hangs up the call)
                 await this.fsService.stopAgentPrompt(agentUuid);
-                await new Promise(resolve => setTimeout(resolve, 200)); // Small delay to ensure echo stops
 
                 // Fetch campaign to check message settings
                 const campaignForPrompt = await this.campaignRepo.findById(call.campaign_id);
@@ -416,6 +437,7 @@ class UltraSimpleCallService {
                     
                     // Start looping prompt to agent - it will play continuously
                     // until the lead answers and we bridge the calls
+                    // The prompt will naturally interrupt the echo() application
                     // The prompt loops automatically using file_string=loop: syntax
                     await this.fsService.startAgentPrompt(agentUuid, promptUrl);
                     
