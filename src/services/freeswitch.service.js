@@ -170,8 +170,11 @@ class FreeSwitchService {
 
     /**
      * Wait for agent to answer
+     * @param {string} agentUuid - Agent channel UUID
+     * @param {number} timeout - Timeout in milliseconds
+     * @param {Function} onAnswerCallback - Optional callback to execute immediately when answer is detected
      */
-    waitForAgentAnswer(agentUuid, timeout = 30000) {
+    waitForAgentAnswer(agentUuid, timeout = 30000, onAnswerCallback = null) {
         return new Promise((resolve) => {
             let answered = false;
 
@@ -186,6 +189,15 @@ class FreeSwitchService {
             const listener = (data) => {
                 // Only resolve as answered if it's the actual agent UUID and not early media
                 if (data.uuid === agentUuid && !answered) {
+                    // CRITICAL: Execute callback immediately to start audio before channel hangs up
+                    if (onAnswerCallback) {
+                        try {
+                            onAnswerCallback(agentUuid);
+                        } catch (e) {
+                            console.log(`⚠️ Error in onAnswerCallback: ${e.message}`);
+                        }
+                    }
+                    
                     // Add a small delay to check if the channel actually stays active
                     setTimeout(() => {
                         // Re-check if still connected
@@ -200,7 +212,7 @@ class FreeSwitchService {
                                 console.log(`⚠️ Channel ${agentUuid} answered but quickly disconnected (early media)`);
                             }
                         });
-                    }, 500);
+                    }, 100); // Reduced delay from 500ms to 100ms
                 }
             };
 

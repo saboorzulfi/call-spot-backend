@@ -481,7 +481,41 @@ class UltraSimpleCallService {
                 existingCallInfo.agent_answered = false; // Track if agent actually answered
             }
             
-            const agentAnswered = await this.fsService.waitForAgentAnswer(agentUuid, 30000);
+            // CRITICAL: Define callback to start audio IMMEDIATELY when answer is detected
+            // This prevents the channel from hanging up due to inactivity
+            const startAudioImmediately = async (uuid) => {
+                console.log(`🚨 ANSWER DETECTED! Starting audio IMMEDIATELY to prevent hangup...`);
+                
+                if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
+                    // Start prompt immediately - this keeps channel alive
+                    const promptUrl = msgCfg.prompt_audio_url;
+                    console.log(`🔊 Starting prompt IMMEDIATELY: ${promptUrl}`);
+                    try {
+                        await this.fsService.startAgentPrompt(uuid, promptUrl);
+                        console.log(`✅ Prompt started IMMEDIATELY - channel should stay alive`);
+                        
+                        // Track it in activeCalls
+                        const info = this.activeCalls.get(call._id.toString());
+                        if (info) {
+                            info.agent_prompt_url = promptUrl;
+                            await this.activeCalls.set(call._id.toString(), info);
+                        }
+                    } catch (e) {
+                        console.log(`⚠️ Failed to start prompt immediately: ${e.message}`);
+                        // Fallback: try echo
+                        await this.startEchoFallback(uuid);
+                    }
+                } else if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
+                    // For on-the-fly synthesis, start echo first, then synthesize
+                    console.log(`⚠️ Prompt needs synthesis, starting echo first...`);
+                    await this.startEchoFallback(uuid);
+                } else {
+                    // No prompt - start echo immediately to keep channel alive
+                    await this.startEchoFallback(uuid);
+                }
+            };
+            
+            const agentAnswered = await this.fsService.waitForAgentAnswer(agentUuid, 30000, startAudioImmediately);
             
             if (!agentAnswered) {
                 console.log(`❌ Agent ${agent.full_name} did not answer`);
@@ -504,33 +538,12 @@ class UltraSimpleCallService {
                 await this.activeCalls.set(call._id.toString(), existingCallInfo);
             }
 
-            console.log(`✅ Agent ${agent.full_name} answered! Starting audio immediately to keep channel alive...`);
+            console.log(`✅ Agent ${agent.full_name} answered! Audio should already be playing...`);
             
-            // CRITICAL: Start audio IMMEDIATELY after agent answers to prevent hangup
-            // park() leaves channel idle, so we must start audio right away
-            // Use the campaign we already fetched earlier
-            
-            if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
-                // Start prompt immediately - this keeps channel alive
-                const promptUrl = msgCfg.prompt_audio_url;
-                console.log(`🔊 Starting prompt immediately: ${promptUrl}`);
-                try {
-                    await this.fsService.startAgentPrompt(agentUuid, promptUrl);
-                    console.log(`✅ Prompt started successfully - channel should stay alive`);
-                    
-                    // Track it in activeCalls
-                    const info = this.activeCalls.get(call._id.toString());
-                    if (info) {
-                        info.agent_prompt_url = promptUrl;
-                        await this.activeCalls.set(call._id.toString(), info);
-                    }
-                } catch (e) {
-                    console.log(`⚠️ Failed to start prompt: ${e.message}`);
-                    // Fallback: try echo
-                    await this.startEchoFallback(agentUuid);
-                }
-            } else if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
-                // Synthesize on-the-fly
+            // Audio should have already started in the onAnswerCallback
+            // If prompt needs synthesis, do it now (echo is already playing as fallback)
+            if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent && !msgCfg?.prompt_audio_url) {
+                // Synthesize on-the-fly and replace echo with prompt
                 console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
                 try {
                     const voiceId = msgCfg?.polly_voice || "Joanna";
@@ -539,22 +552,18 @@ class UltraSimpleCallService {
                         { voiceId }
                     );
                     if (promptUrl) {
+                        // Stop echo and start prompt
+                        await this.fsService.stopAgentPrompt(agentUuid);
                         await this.fsService.startAgentPrompt(agentUuid, promptUrl);
                         const info = this.activeCalls.get(call._id.toString());
                         if (info) {
                             info.agent_prompt_url = promptUrl;
                             await this.activeCalls.set(call._id.toString(), info);
                         }
-                    } else {
-                        await this.startEchoFallback(agentUuid);
                     }
                 } catch (e) {
-                    console.log(`⚠️ Failed to synthesize prompt: ${e.message}`);
-                    await this.startEchoFallback(agentUuid);
+                    console.log(`⚠️ Failed to synthesize prompt: ${e.message}, keeping echo`);
                 }
-            } else {
-                // No prompt - start echo immediately to keep channel alive
-                await this.startEchoFallback(agentUuid);
             }
             
             console.log(`📞 Channel is now active, calling lead and bridging...`);
