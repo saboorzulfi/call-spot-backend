@@ -551,12 +551,12 @@ class UltraSimpleCallService {
                 
                 // THEN: Start audio immediately
                 if (hasPrompt && msgCfg?.message_enabled && msgCfg?.prompt_audio_url) {
-                    // Start prompt immediately - this keeps channel alive
+                    // S3 audio URL exists - play it immediately
                     const promptUrl = msgCfg.prompt_audio_url;
-                    console.log(`🔊 Starting prompt IMMEDIATELY: ${promptUrl}`);
+                    console.log(`🔊 Starting S3 prompt IMMEDIATELY: ${promptUrl}`);
                     try {
                         await this.fsService.startAgentPrompt(uuid, promptUrl);
-                        console.log(`✅ Prompt started IMMEDIATELY - channel should stay alive`);
+                        console.log(`✅ S3 prompt started IMMEDIATELY - channel should stay alive`);
                         
                         // Track it in activeCalls
                         const info = this.activeCalls.get(call._id.toString());
@@ -565,14 +565,42 @@ class UltraSimpleCallService {
                             await this.activeCalls.set(call._id.toString(), info);
                         }
                     } catch (e) {
-                        console.log(`⚠️ Failed to start prompt immediately: ${e.message}`);
+                        console.log(`⚠️ Failed to start S3 prompt immediately: ${e.message}`);
                         // Fallback: try echo
                         await this.startEchoFallback(uuid);
                     }
                 } else if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent) {
-                    // For on-the-fly synthesis, start echo first, then synthesize
-                    console.log(`⚠️ Prompt needs synthesis, starting echo first...`);
+                    // Polly synthesis needed - start echo immediately to keep channel alive
+                    // Then synthesize in parallel and replace echo as soon as ready
+                    console.log(`🔊 Starting echo, synthesizing Polly audio in parallel...`);
                     await this.startEchoFallback(uuid);
+                    
+                    // Start synthesis immediately in parallel (don't await - let it run in background)
+                    const voiceId = msgCfg?.polly_voice || "Joanna";
+                    this.pollyService.synthesizeToS3(
+                        msgCfg.message_for_answered_agent,
+                        { voiceId }
+                    ).then(async (promptUrl) => {
+                        if (promptUrl) {
+                            try {
+                                // Stop echo and start synthesized prompt
+                                console.log(`✅ Polly synthesis complete, replacing echo with prompt: ${promptUrl}`);
+                                await this.fsService.stopAgentPrompt(uuid);
+                                await this.fsService.startAgentPrompt(uuid, promptUrl);
+                                
+                                // Track it in activeCalls
+                                const info = this.activeCalls.get(call._id.toString());
+                                if (info) {
+                                    info.agent_prompt_url = promptUrl;
+                                    await this.activeCalls.set(call._id.toString(), info);
+                                }
+                            } catch (e) {
+                                console.log(`⚠️ Failed to replace echo with synthesized prompt: ${e.message}`);
+                            }
+                        }
+                    }).catch((e) => {
+                        console.log(`⚠️ Failed to synthesize prompt: ${e.message}, keeping echo`);
+                    });
                 } else {
                     // No prompt - start echo immediately to keep channel alive
                     await this.startEchoFallback(uuid);
@@ -605,30 +633,9 @@ class UltraSimpleCallService {
             console.log(`✅ Agent ${agent.full_name} answered! Audio should already be playing...`);
             
             // Audio should have already started in the onAnswerCallback
-            // If prompt needs synthesis, do it now (echo is already playing as fallback)
-            if (hasPrompt && msgCfg?.message_enabled && msgCfg?.message_for_answered_agent && !msgCfg?.prompt_audio_url) {
-                // Synthesize on-the-fly and replace echo with prompt
-                console.log(`⚠️ Prompt audio URL not found, synthesizing on-the-fly...`);
-                try {
-                    const voiceId = msgCfg?.polly_voice || "Joanna";
-                    const promptUrl = await this.pollyService.synthesizeToS3(
-                        msgCfg.message_for_answered_agent,
-                        { voiceId }
-                    );
-                    if (promptUrl) {
-                        // Stop echo and start prompt
-                        await this.fsService.stopAgentPrompt(agentUuid);
-                        await this.fsService.startAgentPrompt(agentUuid, promptUrl);
-                        const info = this.activeCalls.get(call._id.toString());
-                        if (info) {
-                            info.agent_prompt_url = promptUrl;
-                            await this.activeCalls.set(call._id.toString(), info);
-                        }
-                    }
-                } catch (e) {
-                    console.log(`⚠️ Failed to synthesize prompt: ${e.message}, keeping echo`);
-                }
-            }
+            // For Polly synthesis, it's already started in parallel in the callback
+            // For S3 audio, it's already playing
+            // For no prompt, echo is already playing
             
             console.log(`📞 Channel is now active, calling lead and bridging...`);
             
