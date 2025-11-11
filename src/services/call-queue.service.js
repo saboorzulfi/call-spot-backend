@@ -409,7 +409,7 @@ class CallQueueService {
     async handleLeadMissed(callOriginationId, agentId, agentUuid) {
         await this.fsService.hangupCall(agentUuid);
         await this.updateAgentStatus(callOriginationId, agentId, "missed");
-        await this.updateCallStatus(callOriginationId, "un-answered", "Agent answered but lead did not answer");
+        await this.updateCallStatus(callOriginationId, "no-answered", "Agent answered but lead did not answer");
     }
 
     async handleCallConnected(callOriginationId, agentId, agentUuid, leadUuid) {
@@ -550,7 +550,7 @@ class CallQueueService {
     }
 
     isCallCompleted(status) {
-        return ["answered", "missed", "missed by agent(s)", "un-answered"].includes(status);
+        return ["answered", "missed", "missed by agent(s)", "no-answered"].includes(status);
     }
 
     // ==================== CALL QUERIES ====================

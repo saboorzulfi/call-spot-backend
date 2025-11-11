@@ -49,7 +49,7 @@ const leadSchema = new mongoose.Schema({
     },
     call_status: {
       type: String,
-      enum: ["un-answered", "scheduled", "answered", "missed", "in-progress", "missed by agent(s)"],
+      enum: ["no-answered", "scheduled", "answered", "missed", "in-progress", "missed by agent(s)"],
       default: "scheduled"
     },
     call_time: {

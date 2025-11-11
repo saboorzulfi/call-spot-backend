@@ -431,7 +431,7 @@ class UltraSimpleCallService {
             }
             
             // Check if call was already rejected by lead - don't retry
-            if (call.call_status?.call_state === "un-answered" && 
+            if (call.call_status?.call_state === "no-answered" && 
                 call.call_status?.description?.includes("Lead rejected")) {
                 console.log(`🚫 Call ${call._id} was already rejected by lead, not retrying`);
                 return { success: false, reason: "Lead already rejected this call" };
@@ -713,10 +713,10 @@ class UltraSimpleCallService {
                     }
                     
                     // Single combined update: agent status + call status
-                    // Mark as un-answered with rejection reason to prevent future retries
+                    // Mark as no-answered with rejection reason to prevent future retries
                     await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
                         agents: agents,
-                        "call_status.call_state": "un-answered",
+                        "call_status.call_state": "no-answered",
                         "call_status.description": `Lead rejected the call - ${error.cause}`,
                         updated_at: new Date()
                     });
@@ -725,7 +725,7 @@ class UltraSimpleCallService {
                     await this.updateAgentModelStatus(agent._id, "free");
                     
                     // Update campaign stats for rejection
-                    await this.updateCampaignCallStats(call.campaign_id, call.account_id, "un-answered");
+                    await this.updateCampaignCallStats(call.campaign_id, call.account_id, "no-answered");
                     
                     // Return with stop_trying flag to prevent retrying
                     return { 
@@ -758,7 +758,7 @@ class UltraSimpleCallService {
                 // Single combined update: agent status + call status
                 await this.callRepo.updateByIdAndAccount(call._id, call.account_id, {
                     agents: agents,
-                    "call_status.call_state": "un-answered",
+                    "call_status.call_state": "no-answered",
                     "call_status.description": "Agent answered but lead did not answer",
                     updated_at: new Date()
                 });
@@ -767,7 +767,7 @@ class UltraSimpleCallService {
                 await this.updateAgentModelStatus(agent._id, "free");
                 
                 // Update campaign stats for no_answer immediately
-                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "un-answered");
+                await this.updateCampaignCallStats(call.campaign_id, call.account_id, "no-answered");
                 return { success: false, reason: "Lead did not answer" };
             }
 
@@ -973,7 +973,7 @@ class UltraSimpleCallService {
         
         // Handle different hangup causes
         if (cause === "CALL_REJECTED" || cause === "USER_BUSY") {
-            finalStatus = "un-answered";
+            finalStatus = "no-answered";
             finalDescription = `Lead rejected the call - ${cause}`;
         } else if (cause === "INVALID_NUMBER_FORMAT" || cause === "NORMAL_TEMPORARY_FAILURE" || cause === "NO_ROUTE_DESTINATION") {
             // Call routing failures
@@ -1046,7 +1046,7 @@ class UltraSimpleCallService {
             const inc = { "call_stats.total": 1 };
             if (finalStatus === "completed") {
                 inc["call_stats.answered"] = 1;
-            } else if (finalStatus === "un-answered") {
+            } else if (finalStatus === "no-answered") {
                 inc["call_stats.no_answer"] = 1;
             } else if (finalStatus === "missed" || finalStatus === "missed by agent(s)") {
                 inc["call_stats.missed"] = 1;
@@ -1216,7 +1216,7 @@ class UltraSimpleCallService {
                     break;
                 case "free":
                 case "missed":
-                case "un-answered":
+                case "no-answered":
                 case "answered": // When call is answered, agent stays in-progress
                 default:
                     agentStatus = "free";

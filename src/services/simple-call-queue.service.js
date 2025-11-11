@@ -107,7 +107,7 @@ class SimpleCallQueueService {
             if (!leadUuid) {
                 console.log(`❌ Lead did not answer`);
                 await this.fsService.hangupCall(agentUuid);
-                await this.updateCallStatus(call._id, "un-answered", "Agent answered but lead did not answer");
+                await this.updateCallStatus(call._id, "no-answered", "Agent answered but lead did not answer");
                 return { success: false, reason: "Lead did not answer" };
             }
 

@@ -238,7 +238,7 @@ class AgentGroupController {
       throw new AppError("Call result is required", 400);
     }
 
-    if (!['answered', 'no_answer', 'missed'].includes(call_result)) {
+    if (!['answered', 'no-answered', 'missed'].includes(call_result)) {
       throw new AppError("Invalid call result", 400);
     }
 

@@ -160,7 +160,7 @@ class AgentRepository {
         case "answered":
           updateField["call_stats.answered"] = 1;
           break;
-        case "no_answer":
+        case "no-answered":
           updateField["call_stats.no_answer"] = 1;
           break;
         case "missed":
