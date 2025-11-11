@@ -179,7 +179,7 @@ class TikTokService {
     }
   }
 
-  async getLeads(formId, advertiserId, accessToken) {
+  async getLeads(formId, advertiserId, accessToken, page = 1, pageSize = 250) {
     try {
       const url = `${this.baseURL}/lead/list/`;
       const response = await axios.get(url, {
@@ -190,8 +190,8 @@ class TikTokService {
         params: {
           advertiser_id: advertiserId,
           form_id: formId,
-          page: 1,
-          page_size: 250
+          page: page,
+          page_size: pageSize
         }
       });
 

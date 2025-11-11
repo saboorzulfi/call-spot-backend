@@ -1,9 +1,11 @@
 const cron = require('node-cron');
 const FacebookLeadSyncService = require('./facebook-lead-sync.service');
+const TikTokLeadSyncService = require('./tiktok-lead-sync.service');
 
 class CronService {
     constructor() {
         this.facebookLeadSync = new FacebookLeadSyncService();
+        this.tiktokLeadSync = new TikTokLeadSyncService();
         this.jobs = [];
     }
 
@@ -13,9 +15,9 @@ class CronService {
     start() {
         console.log("⏰ Initializing cron jobs...");
 
-        // Daily Facebook leads sync at 2 AM
-        const facebookSyncJob = cron.schedule('0 2 * * *', async () => {
-            console.log("📅 Running daily Facebook leads sync...");
+        // Facebook leads sync every 5 minutes
+        const facebookSyncJob = cron.schedule('*/5 * * * *', async () => {
+            console.log("📅 Running Facebook leads sync (every 5 minutes)...");
             try {
                 await this.facebookLeadSync.syncAllCampaigns();
             } catch (error) {
@@ -28,9 +30,29 @@ class CronService {
 
         this.jobs.push({
             name: 'facebook-leads-sync',
-            schedule: '0 2 * * *',
-            description: 'Daily Facebook leads sync at 2 AM',
+            schedule: '*/5 * * * *',
+            description: 'Facebook leads sync every 5 minutes',
             job: facebookSyncJob
+        });
+
+        // TikTok leads sync every 5 minutes
+        const tiktokSyncJob = cron.schedule('*/5 * * * *', async () => {
+            console.log("📅 Running TikTok leads sync (every 5 minutes)...");
+            try {
+                await this.tiktokLeadSync.syncAllCampaigns();
+            } catch (error) {
+                console.error("❌ Error in TikTok leads sync cron:", error);
+            }
+        }, {
+            scheduled: false, // Don't start immediately, we'll start it manually
+            timezone: "Asia/Dubai"
+        });
+
+        this.jobs.push({
+            name: 'tiktok-leads-sync',
+            schedule: '*/5 * * * *',
+            description: 'TikTok leads sync every 5 minutes',
+            job: tiktokSyncJob
         });
 
         // Start all jobs
@@ -61,6 +83,19 @@ class CronService {
             await this.facebookLeadSync.syncAllCampaigns();
         } catch (error) {
             console.error("❌ Error in manual Facebook sync:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Manually trigger TikTok leads sync (for testing)
+     */
+    async triggerTikTokSync() {
+        console.log("🔄 Manually triggering TikTok leads sync...");
+        try {
+            await this.tiktokLeadSync.syncAllCampaigns();
+        } catch (error) {
+            console.error("❌ Error in manual TikTok sync:", error);
             throw error;
         }
     }
