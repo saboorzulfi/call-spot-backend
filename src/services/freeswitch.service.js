@@ -138,6 +138,62 @@ class FreeSwitchService {
     }
 
     /**
+     * List all available gateways
+     */
+    async listGateways() {
+        try {
+            const result = await this.api('sofia status gateway');
+            console.log(`📋 Available gateways:`, result.trim());
+            return result;
+        } catch (error) {
+            console.error(`❌ Error listing gateways:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Check gateway registration status
+     */
+    async checkGatewayStatus(gatewayName) {
+        try {
+            // First, list all gateways to see what's available
+            await this.listGateways();
+            
+            // Check sofia status for the specific gateway
+            const statusCmd = `sofia status gateway ${gatewayName}`;
+            const result = await this.api(statusCmd);
+            console.log(`🔍 Gateway ${gatewayName} status:`, result.trim());
+            
+            // Check if gateway exists and is registered
+            if (result.includes('Invalid Gateway') || result.includes('not found')) {
+                console.error(`❌ Gateway ${gatewayName} not found in FreeSWITCH`);
+                return false;
+            }
+            
+            // Check if gateway is registered (should contain "REGED" or "REGISTER")
+            const isRegistered = result.includes('REGED') || result.includes('REGISTER');
+            const isNotRegistered = result.includes('NOREG');
+            
+            if (isNotRegistered) {
+                console.warn(`⚠️ Gateway ${gatewayName} is NOT REGISTERED (NOREG)`);
+                return false;
+            }
+            
+            if (isRegistered) {
+                console.log(`✅ Gateway ${gatewayName} is REGISTERED`);
+                return true;
+            }
+            
+            // If we can't determine, assume it might work
+            return true;
+        } catch (error) {
+            console.error(`❌ Error checking gateway status:`, error);
+            // If we can't check, assume it might work and continue
+            return true;
+        }
+    }
+
+    /**
      * Start agent call
      * @param {string} agentNumber - Agent's phone number
      * @param {string} callId - Call ID for tracking
@@ -152,6 +208,12 @@ class FreeSwitchService {
         // FreeSWITCH gateway names in originate should be just the gateway name, not "external::gateway"
         const gatewayName = this.config.gateway.replace(/^external::/, '');
         
+        // Check gateway status before making call
+        const gatewayOk = await this.checkGatewayStatus(gatewayName);
+        if (!gatewayOk) {
+            console.warn(`⚠️ Gateway ${gatewayName} may not be registered, but attempting call anyway...`);
+        }
+        
         // Use park() to keep channel alive - this allows the call to ring through normally
         // After agent answers, we'll unpark and start audio immediately to keep channel active
         // When we bridge, the audio will be replaced with lead's audio
@@ -163,7 +225,16 @@ class FreeSwitchService {
         console.log("📤 Agent originate result:", result.trim());
 
         if (!result.startsWith("+OK")) {
-            throw new Error("Failed to start agent call");
+            // Provide more detailed error message
+            const errorMsg = result.trim();
+            console.error(`❌ Originate failed: ${errorMsg}`);
+            
+            // Check if it's a gateway issue
+            if (errorMsg.includes('NORMAL_TEMPORARY_FAILURE') || errorMsg.includes('NO_ROUTE_DESTINATION')) {
+                throw new Error(`Failed to start agent call: Gateway ${gatewayName} may not be registered or reachable. Error: ${errorMsg}`);
+            }
+            
+            throw new Error(`Failed to start agent call: ${errorMsg}`);
         }
 
         return agentUuid;
