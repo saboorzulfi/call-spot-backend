@@ -148,13 +148,16 @@ class FreeSwitchService {
         const agentUuid = this.generateUUID();
         console.log(`📞 Starting agent call to: ${agentNumber}`);
 
-        // Use sleep(0) - this keeps the channel alive without interfering with the call
-        // sleep(0) allows the call to ring through normally and keeps channel active
-        // After agent answers, we'll start audio immediately to keep channel active
+        // Extract gateway name (remove "external::" prefix if present for originate command)
+        // FreeSWITCH gateway names in originate should be just the gateway name, not "external::gateway"
+        const gatewayName = this.config.gateway.replace(/^external::/, '');
+        
+        // Use park() to keep channel alive - this allows the call to ring through normally
+        // After agent answers, we'll unpark and start audio immediately to keep channel active
         // When we bridge, the audio will be replaced with lead's audio
-        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${this.config.gateway}/${agentNumber} &park`;
+        const agentCmd = `originate {origination_uuid=${agentUuid},ignore_early_media=false,hangup_after_bridge=false,continue_on_fail=true,originate_timeout=30,bypass_media=false,proxy_media=false}sofia/gateway/${gatewayName}/${agentNumber} &park()`;
         console.log("🧾 Agent Command:", agentCmd);
-        console.log("ℹ️ Using sleep(0) - call will ring through normally, channel ready for media after agent answers");
+        console.log(`ℹ️ Using park() - call will ring through normally via gateway: ${gatewayName}`);
 
         const result = await this.api(agentCmd);
         console.log("📤 Agent originate result:", result.trim());
@@ -228,7 +231,9 @@ class FreeSwitchService {
 
         // Direct bridge approach - call lead and bridge to agent number
         // This works when agent is already answered
-        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(sofia/gateway/${this.config.gateway}/${agentNumber})`;
+        // Extract gateway name (remove "external::" prefix if present)
+        const gatewayName = this.config.gateway.replace(/^external::/, '');
+        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${gatewayName}/${leadNumber} &bridge(sofia/gateway/${gatewayName}/${agentNumber})`;
         console.log("🧾 Bridge Command:", bridgeCmd);
 
         const res = await this.api(bridgeCmd);
@@ -250,7 +255,9 @@ class FreeSwitchService {
         console.log(`📞 Dialing lead and bridging to agent UUID: ${leadNumber}`);
 
         // Use the agent UUID in the bridge command
-        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &bridge(${agentUuid})`;
+        // Extract gateway name (remove "external::" prefix if present)
+        const gatewayName = this.config.gateway.replace(/^external::/, '');
+        const bridgeCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=true,originate_timeout=30}sofia/gateway/${gatewayName}/${leadNumber} &bridge(${agentUuid})`;
         console.log("🧾 Bridge Command:", bridgeCmd);
 
         const res = await this.api(bridgeCmd);
@@ -272,7 +279,9 @@ class FreeSwitchService {
         console.log(`📞 Dialing lead separately: ${leadNumber}`);
 
         // Use your exact working lead command format
-        const leadCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=false,originate_timeout=30}sofia/gateway/${this.config.gateway}/${leadNumber} &park()`;
+        // Extract gateway name (remove "external::" prefix if present)
+        const gatewayName = this.config.gateway.replace(/^external::/, '');
+        const leadCmd = `originate {origination_uuid=${leadUuid},ignore_early_media=false,bypass_media=false,proxy_media=false,hangup_after_bridge=false,originate_timeout=30}sofia/gateway/${gatewayName}/${leadNumber} &park()`;
         console.log("🧾 Lead Command:", leadCmd);
 
         const res = await this.api(leadCmd);
