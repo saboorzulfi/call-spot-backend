@@ -36,7 +36,7 @@ class Server {
 
       // Initialize cron jobs
       console.log("⏰ Initializing cron jobs...");
-      this.cronService.start();
+      // this.cronService.start();
 
       // Backend services initialized
       console.log("✅ Backend services initialized");

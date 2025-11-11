@@ -181,23 +181,54 @@ class TikTokService {
 
   async getLeads(formId, advertiserId, accessToken, page = 1, pageSize = 250) {
     try {
-      const url = `${this.baseURL}/lead/list/`;
-      const response = await axios.get(url, {
-        headers: {
-          'Access-Token': accessToken,
-          'Content-Type': 'application/json'
-        },
-        params: {
-          advertiser_id: advertiserId,
-          form_id: formId,
-          page: page,
-          page_size: pageSize
-        }
-      });
+      // Try /page/lead/get endpoint first (based on TikTok API pattern)
+      // formId is actually page_id from the forms list
+      let url = `${this.baseURL}/page/lead/get`;
+      let params = {
+        advertiser_id: advertiserId,
+        page_id: formId, // Use page_id instead of form_id
+        page: page,
+        page_size: pageSize
+      };
 
-      return response.data;
+      try {
+        const response = await axios.get(url, {
+          headers: {
+            'Access-Token': accessToken,
+            'Content-Type': 'application/json'
+          },
+          params: params
+        });
+        return response.data;
+      } catch (firstError) {
+        // If 404, try alternative endpoint /lead/get
+        if (firstError.response?.status === 404) {
+          console.log(`⚠️  /page/lead/get returned 404, trying /lead/get...`);
+          url = `${this.baseURL}/lead/get`;
+          params = {
+            advertiser_id: advertiserId,
+            page_id: formId,
+            page: page,
+            page_size: pageSize
+          };
+          
+          const response = await axios.get(url, {
+            headers: {
+              'Access-Token': accessToken,
+              'Content-Type': 'application/json'
+            },
+            params: params
+          });
+          return response.data;
+        }
+        throw firstError;
+      }
     } catch (error) {
       console.error('Error fetching TikTok leads:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
       throw new Error(`Failed to fetch TikTok leads: ${error.message}`);
     }
   }

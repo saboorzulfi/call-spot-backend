@@ -16,7 +16,7 @@ class CronService {
         console.log("⏰ Initializing cron jobs...");
 
         // Facebook leads sync every 5 minutes
-        const facebookSyncJob = cron.schedule('*/5 * * * *', async () => {
+        const facebookSyncJob = cron.schedule('*/1 * * * *', async () => {
             console.log("📅 Running Facebook leads sync (every 5 minutes)...");
             try {
                 await this.facebookLeadSync.syncAllCampaigns();
@@ -30,13 +30,13 @@ class CronService {
 
         this.jobs.push({
             name: 'facebook-leads-sync',
-            schedule: '*/5 * * * *',
+            schedule: '*/1 * * * *',
             description: 'Facebook leads sync every 5 minutes',
             job: facebookSyncJob
         });
 
         // TikTok leads sync every 5 minutes
-        const tiktokSyncJob = cron.schedule('*/5 * * * *', async () => {
+        const tiktokSyncJob = cron.schedule('*/1 * * * *', async () => {
             console.log("📅 Running TikTok leads sync (every 5 minutes)...");
             try {
                 await this.tiktokLeadSync.syncAllCampaigns();
@@ -50,7 +50,7 @@ class CronService {
 
         this.jobs.push({
             name: 'tiktok-leads-sync',
-            schedule: '*/5 * * * *',
+            schedule: '*/1 * * * *',
             description: 'TikTok leads sync every 5 minutes',
             job: tiktokSyncJob
         });
