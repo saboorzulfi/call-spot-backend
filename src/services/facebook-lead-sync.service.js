@@ -13,15 +13,9 @@ class FacebookLeadSyncService {
         this.accountRepo = new AccountRepository();
     }
 
-    /**
-     * Sync Facebook leads for all campaigns
-     * Runs daily via cron job
-     */
     async syncAllCampaigns() {
         try {
             console.log("🔄 Starting Facebook leads sync...");
-
-            // Get all campaigns with Facebook form ID directly from model
             const Campaign = require("../models/campaign.model");
             const allCampaigns = await Campaign.find({
                 deleted_at: null,
@@ -29,13 +23,12 @@ class FacebookLeadSyncService {
                 "facebook_data.facebook_page_token": { $exists: true, $ne: null }
             });
 
-            console.log(`📊 Found ${allCampaigns.length} campaigns with Facebook forms`);
+            console.log(`Found ${allCampaigns.length} campaigns with Facebook forms`);
 
             let totalProcessed = 0;
             let totalCreated = 0;
             let totalSkipped = 0;
 
-            // Process each campaign
             for (const campaign of allCampaigns) {
                 try {
                     const result = await this.syncCampaignLeads(campaign);
@@ -43,51 +36,55 @@ class FacebookLeadSyncService {
                     totalCreated += result.created;
                     totalSkipped += result.skipped;
                 } catch (error) {
-                    console.error(`❌ Error syncing campaign ${campaign._id}:`, error.message);
+                    console.error(`Error syncing campaign ${campaign._id}:`, error.message);
                 }
             }
 
-            console.log(`✅ Facebook leads sync completed:`);
+            console.log(`Facebook leads sync completed:`);
             console.log(`   - Campaigns processed: ${totalProcessed}`);
             console.log(`   - Calls created: ${totalCreated}`);
             console.log(`   - Duplicates skipped: ${totalSkipped}`);
 
         } catch (error) {
-            console.error("❌ Error in Facebook leads sync:", error);
+            console.error("Error in Facebook leads sync:", error);
         }
     }
 
-    /**
-     * Sync leads for a single campaign
-     */
+
     async syncCampaignLeads(campaign) {
         try {
             console.log(`📞 Syncing leads for campaign: ${campaign.name} (${campaign._id})`);
 
-            // Get account to decrypt access token
             const account = await this.accountRepo.findById(campaign.account_id);
             if (!account || !account.facebook_access_token) {
-                console.log(`⚠️  Account not found or no Facebook token for campaign ${campaign._id}`);
+                console.log(`Account not found or no Facebook token for campaign ${campaign._id}`);
                 return { created: 0, skipped: 0 };
             }
 
-            // Decrypt access token - use page token if available, otherwise use account token
             let accessToken;
-            if (campaign.facebook_data.facebook_page_token) {
-                accessToken = await decrypt(campaign.facebook_data.facebook_page_token);
-            } else {
-                accessToken = await decrypt(account.facebook_access_token);
+            try {
+                if (campaign.facebook_data?.facebook_page_token) {
+                    accessToken = await decrypt(campaign.facebook_data.facebook_page_token);
+                } else if (account.facebook_access_token) {
+                    accessToken = await decrypt(account.facebook_access_token);
+                } else {
+                    console.log(`⚠️  No Facebook access token found for campaign ${campaign._id}`);
+                    return { created: 0, skipped: 0 };
+                }
+            } catch (decryptError) {
+                console.error(`❌ Failed to decrypt Facebook token for campaign ${campaign._id}:`, decryptError.message);
+                console.error(`⚠️  This may indicate the token is corrupted or encrypted with a different key`);
+                console.error(`⚠️  Please re-authenticate Facebook integration for this account`);
+                return { created: 0, skipped: 0 };
             }
 
-            // Fetch all leads from Facebook (handle pagination)
             const allLeads = await this.fetchAllLeads(campaign.facebook_data.facebook_form_id, accessToken);
 
-            console.log(`📥 Fetched ${allLeads.length} leads from Facebook for campaign ${campaign.name}`);
+            console.log(`Fetched ${allLeads.length} leads from Facebook for campaign ${campaign.name}`);
 
             let created = 0;
             let skipped = 0;
 
-            // Process each lead
             for (const lead of allLeads) {
                 try {
                     const result = await this.processLead(lead, campaign);
@@ -103,14 +100,11 @@ class FacebookLeadSyncService {
 
             return { created, skipped };
         } catch (error) {
-            console.error(`❌ Error syncing campaign ${campaign._id}:`, error);
+            console.error(`Error syncing campaign ${campaign._id}:`, error);
             throw error;
         }
     }
 
-    /**
-     * Fetch all leads from Facebook (handles pagination)
-     */
     async fetchAllLeads(formId, accessToken) {
         const allLeads = [];
         let nextUrl = null;
@@ -120,18 +114,15 @@ class FacebookLeadSyncService {
             try {
                 let responseData;
                 if (nextUrl) {
-                    // Use the next URL from pagination
                     const response = await axios.get(nextUrl);
                     responseData = response.data;
                 } else {
-                    // Initial request - getLeads returns data directly
                     responseData = await this.facebookService.getLeads(formId, accessToken);
                 }
 
                 if (responseData && responseData.data) {
                     allLeads.push(...responseData.data);
 
-                    // Check for next page
                     if (responseData.paging && responseData.paging.next) {
                         nextUrl = responseData.paging.next;
                     } else {
@@ -141,7 +132,7 @@ class FacebookLeadSyncService {
                     nextUrl = null;
                 }
             } catch (error) {
-                console.error("⚠️  Error fetching Facebook leads page:", error.message);
+                console.error("Error fetching Facebook leads page:", error.message);
                 nextUrl = null;
             }
         } while (nextUrl);
@@ -149,16 +140,12 @@ class FacebookLeadSyncService {
         return allLeads;
     }
 
-    /**
-     * Process a single lead - check for duplicates and create call if new
-     */
     async processLead(lead, campaign) {
         try {
-            // Extract lead data from Facebook field_data
             const leadData = this.extractLeadData(lead.field_data);
 
             if (!leadData.phone_number) {
-                console.log(`⚠️  Lead ${lead.id} has no phone number, skipping`);
+                console.log(`Lead ${lead.id} has no phone number, skipping`);
                 return { created: false };
             }
 
@@ -171,18 +158,16 @@ class FacebookLeadSyncService {
             });
 
             if (existing) {
-                console.log(`⏭️  Lead ${lead.id} already exists as call ${existing._id}, skipping`);
+                console.log(`Lead ${lead.id} already exists as call ${existing._id}, skipping`);
                 return { created: false };
             }
 
-            // Map custom fields if enabled
             let mappedLeadData = { ...leadData };
             if (campaign.custom_fields && campaign.custom_fields.is_active && campaign.custom_fields.widget_custom_field) {
                 mappedLeadData = this.mapCustomFields(lead.field_data, campaign.custom_fields.widget_custom_field, leadData);
             }
 
-            // Create call record
-            // Mongoose Map accepts plain objects - it will convert automatically
+
             const callData = {
                 account_id: campaign.account_id,
                 call_origination_id: new mongoose.Types.ObjectId(),
@@ -191,25 +176,22 @@ class FacebookLeadSyncService {
                 campaign_id: campaign._id,
                 campaign_name: campaign.name,
                 site_url: campaign.site_url,
-                lead_data: mappedLeadData, // Mongoose will convert object to Map
+                lead_data: mappedLeadData,
                 register_time: new Date(lead.created_time),
                 start_time: new Date(lead.created_time)
             };
 
             const call = await this.callRepo.create(callData);
 
-            console.log(`✅ Created call ${call._id} for Facebook lead ${lead.id}`);
+            console.log(`Created call ${call._id} for Facebook lead ${lead.id}`);
             return { created: true, callId: call._id };
 
         } catch (error) {
-            console.error(`❌ Error processing lead ${lead.id}:`, error);
+            console.error(`Error processing lead ${lead.id}:`, error);
             throw error;
         }
     }
 
-    /**
-     * Extract standard lead data from Facebook field_data
-     */
     extractLeadData(fieldData) {
         const leadData = {};
 
@@ -218,7 +200,6 @@ class FacebookLeadSyncService {
             const value = field.values && field.values.length > 0 ? field.values[0] : null;
 
             if (value) {
-                // Map standard fields
                 if (fieldName === 'full_name' || fieldName === 'name') {
                     leadData.name = value;
                     leadData.full_name = value;
@@ -227,7 +208,6 @@ class FacebookLeadSyncService {
                 } else if (fieldName === 'email') {
                     leadData.email = value;
                 } else {
-                    // Store other fields as-is
                     leadData[field.name] = value;
                 }
             }
@@ -236,23 +216,17 @@ class FacebookLeadSyncService {
         return leadData;
     }
 
-    /**
-     * Map custom fields from campaign to lead_data
-     */
     mapCustomFields(facebookFieldData, customFields, baseLeadData) {
         const mappedData = { ...baseLeadData };
 
-        // Create a map of Facebook field names to values
         const facebookFieldMap = {};
         facebookFieldData.forEach(field => {
             facebookFieldMap[field.name] = field.values && field.values.length > 0 ? field.values[0] : null;
         });
 
-        // Map custom fields based on campaign configuration
         customFields.forEach(customField => {
             const facebookValue = facebookFieldMap[customField.key];
             if (facebookValue) {
-                // Use custom field name as the key in lead_data
                 mappedData[customField.name] = facebookValue;
             }
         });

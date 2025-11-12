@@ -47,7 +47,7 @@ class CallRepository {
         ];
       }
       if (source) {
-        query["source_type"] = source;
+        query["source_type"] = source?.toLowerCase();
       }
       if (campaignID) {
         query["campaign_id"] = campaignID;

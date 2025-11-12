@@ -179,56 +179,183 @@ class TikTokService {
     }
   }
 
-  async getLeads(formId, advertiserId, accessToken, page = 1, pageSize = 250) {
+  /**
+   * Create a task to export leads from TikTok
+   * @param {string} pageId - The page_id (form_id) from TikTok forms
+   * @param {string} advertiserId - TikTok advertiser ID
+   * @param {string} accessToken - TikTok access token
+   * @returns {Promise<string>} task_id
+   */
+  async createLeadTask(pageId, advertiserId, accessToken) {
     try {
-      // Try /page/lead/get endpoint first (based on TikTok API pattern)
-      // formId is actually page_id from the forms list
-      let url = `${this.baseURL}/page/lead/get`;
-      let params = {
+      const url = `${this.baseURL}/page/lead/task/`;
+      const response = await axios.post(url, {
         advertiser_id: advertiserId,
-        page_id: formId, // Use page_id instead of form_id
-        page: page,
-        page_size: pageSize
-      };
-
-      try {
-        const response = await axios.get(url, {
-          headers: {
-            'Access-Token': accessToken,
-            'Content-Type': 'application/json'
-          },
-          params: params
-        });
-        return response.data;
-      } catch (firstError) {
-        // If 404, try alternative endpoint /lead/get
-        if (firstError.response?.status === 404) {
-          console.log(`⚠️  /page/lead/get returned 404, trying /lead/get...`);
-          url = `${this.baseURL}/lead/get`;
-          params = {
-            advertiser_id: advertiserId,
-            page_id: formId,
-            page: page,
-            page_size: pageSize
-          };
-          
-          const response = await axios.get(url, {
-            headers: {
-              'Access-Token': accessToken,
-              'Content-Type': 'application/json'
-            },
-            params: params
-          });
-          return response.data;
+        page_id: pageId
+      }, {
+        headers: {
+          'Access-Token': accessToken,
+          'Content-Type': 'application/json'
         }
-        throw firstError;
+      });
+
+      const taskId = response.data?.data?.task_id;
+      if (!taskId) {
+        throw new Error('Task ID not received from TikTok API');
       }
+
+      console.log(`✅ Created TikTok lead task: ${taskId}`);
+      return taskId;
     } catch (error) {
-      console.error('Error fetching TikTok leads:', error);
+      console.error('Error creating TikTok lead task:', error);
       if (error.response) {
         console.error('Response status:', error.response.status);
         console.error('Response data:', error.response.data);
       }
+      throw new Error(`Failed to create TikTok lead task: ${error.message}`);
+    }
+  }
+
+  /**
+   * Download CSV leads from TikTok task
+   * @param {string} taskId - Task ID from createLeadTask
+   * @param {string} accessToken - TikTok access token
+   * @returns {Promise<Array<Array<string>>>} CSV data as array of arrays
+   */
+  async downloadLeadCSV(taskId, accessToken) {
+    try {
+      const url = `${this.baseURL}/page/lead/task/download/`;
+      const response = await axios.get(url, {
+        headers: {
+          'Access-Token': accessToken,
+          'Content-Type': 'application/json'
+        },
+        params: {
+          task_id: taskId
+        },
+        responseType: 'text' // Expect CSV as text
+      });
+
+      // Parse CSV string to array of arrays
+      const csvData = this.parseCSV(response.data);
+      return csvData;
+    } catch (error) {
+      console.error('Error downloading TikTok lead CSV:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
+      throw new Error(`Failed to download TikTok lead CSV: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse CSV string to array of arrays
+   * @param {string} csvString - CSV content as string
+   * @returns {Array<Array<string>>} Parsed CSV data
+   */
+  parseCSV(csvString) {
+    if (!csvString || typeof csvString !== 'string') {
+      return [];
+    }
+
+    const lines = csvString.split('\n').filter(line => line.trim() !== '');
+    return lines.map(line => {
+      // Handle quoted fields with commas
+      const fields = [];
+      let currentField = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            // Escaped quote
+            currentField += '"';
+            i++; // Skip next quote
+          } else {
+            // Toggle quote state
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          // Field separator
+          fields.push(currentField.trim());
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+
+      // Add last field
+      fields.push(currentField.trim());
+      return fields;
+    });
+  }
+
+  /**
+   * Get leads from TikTok using task-based CSV download
+   * @param {string} formId - The page_id (form_id) from TikTok forms
+   * @param {string} advertiserId - TikTok advertiser ID
+   * @param {string} accessToken - TikTok access token
+   * @returns {Promise<Array>} Array of lead objects
+   */
+  async getLeads(formId, advertiserId, accessToken) {
+    try {
+      // Step 1: Create task
+      const taskId = await this.createLeadTask(formId, advertiserId, accessToken);
+
+      // Step 2: Download CSV (may need to wait/poll if task is not ready)
+      // For now, try immediately - may need to add retry logic if task takes time
+      let csvData;
+      let retries = 0;
+      const maxRetries = 10;
+      const retryDelay = 2000; // 2 seconds
+
+      while (retries < maxRetries) {
+        try {
+          csvData = await this.downloadLeadCSV(taskId, accessToken);
+          if (csvData && csvData.length > 0) {
+            break; // Success
+          }
+        } catch (error) {
+          if (error.message.includes('task') || error.response?.status === 404) {
+            // Task might not be ready yet
+            if (retries < maxRetries - 1) {
+              console.log(`⏳ Task ${taskId} not ready, retrying in ${retryDelay}ms... (${retries + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              retries++;
+              continue;
+            }
+          }
+          throw error;
+        }
+        retries++;
+      }
+
+      if (!csvData || csvData.length === 0) {
+        console.log(`⚠️  No leads found in CSV for task ${taskId}`);
+        return [];
+      }
+
+      // Step 3: Convert CSV rows to lead objects
+      // First row is headers, rest are data
+      const headers = csvData[0] || [];
+      const leads = csvData.slice(1).map((row, index) => {
+        const lead = {};
+        headers.forEach((header, colIndex) => {
+          if (header && row[colIndex] !== undefined) {
+            lead[header.trim()] = row[colIndex]?.trim() || '';
+          }
+        });
+        return lead;
+      }).filter(lead => Object.keys(lead).length > 0); // Remove empty rows
+
+      console.log(`✅ Parsed ${leads.length} leads from TikTok CSV`);
+      return leads;
+    } catch (error) {
+      console.error('Error fetching TikTok leads:', error);
       throw new Error(`Failed to fetch TikTok leads: ${error.message}`);
     }
   }

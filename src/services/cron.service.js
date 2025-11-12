@@ -9,22 +9,18 @@ class CronService {
         this.jobs = [];
     }
 
-    /**
-     * Initialize all cron jobs
-     */
     start() {
         console.log("⏰ Initializing cron jobs...");
 
-        // Facebook leads sync every 5 minutes
         const facebookSyncJob = cron.schedule('*/1 * * * *', async () => {
-            console.log("📅 Running Facebook leads sync (every 5 minutes)...");
+            console.log("Running Facebook leads sync (every 1 minute)...");
             try {
                 await this.facebookLeadSync.syncAllCampaigns();
             } catch (error) {
-                console.error("❌ Error in Facebook leads sync cron:", error);
+                console.error("Error in Facebook leads sync cron:", error);
             }
         }, {
-            scheduled: false, // Don't start immediately, we'll start it manually
+            scheduled: false,
             timezone: "Asia/Dubai"
         });
 
@@ -35,16 +31,15 @@ class CronService {
             job: facebookSyncJob
         });
 
-        // TikTok leads sync every 5 minutes
         const tiktokSyncJob = cron.schedule('*/1 * * * *', async () => {
-            console.log("📅 Running TikTok leads sync (every 5 minutes)...");
+            console.log("Running TikTok leads sync (every 1 minute)...");
             try {
                 await this.tiktokLeadSync.syncAllCampaigns();
             } catch (error) {
-                console.error("❌ Error in TikTok leads sync cron:", error);
+                console.error("Error in TikTok leads sync cron:", error);
             }
         }, {
-            scheduled: false, // Don't start immediately, we'll start it manually
+            scheduled: false,
             timezone: "Asia/Dubai"
         });
 
@@ -55,18 +50,15 @@ class CronService {
             job: tiktokSyncJob
         });
 
-        // Start all jobs
         this.jobs.forEach(job => {
             job.job.start();
-            console.log(`✅ Started cron job: ${job.name} (${job.schedule})`);
+            console.log(`Started cron job: ${job.name} (${job.schedule})`);
         });
 
-        console.log(`✅ All cron jobs initialized (${this.jobs.length} jobs)`);
+        console.log(`All cron jobs initialized (${this.jobs.length} jobs)`);
     }
 
-    /**
-     * Stop all cron jobs
-     */
+
     stop() {
         this.jobs.forEach(job => {
             job.job.stop();
@@ -74,9 +66,7 @@ class CronService {
         });
     }
 
-    /**
-     * Manually trigger Facebook leads sync (for testing)
-     */
+
     async triggerFacebookSync() {
         console.log("🔄 Manually triggering Facebook leads sync...");
         try {
@@ -87,9 +77,7 @@ class CronService {
         }
     }
 
-    /**
-     * Manually trigger TikTok leads sync (for testing)
-     */
+
     async triggerTikTokSync() {
         console.log("🔄 Manually triggering TikTok leads sync...");
         try {

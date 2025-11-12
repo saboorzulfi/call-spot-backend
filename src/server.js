@@ -21,7 +21,6 @@ class Server {
       await new Database().connect();
       console.log("✅ Database connected successfully");
 
-      // Initialize FreeSWITCH service (optional)
       if (config.esl.enabled) {
         console.log("🔌 Initializing FreeSWITCH service...");
         this.fsService = new FreeSwitchService();
@@ -31,17 +30,13 @@ class Server {
         this.fsService = null;
       }
 
-      // Make FreeSWITCH service globally accessible (even if not connected)
       global.fsService = this.fsService;
 
-      // Initialize cron jobs
-      console.log("⏰ Initializing cron jobs...");
-      // this.cronService.start();
+      console.log("Initializing cron jobs...");
+      this.cronService.start();
 
-      // Backend services initialized
-      console.log("✅ Backend services initialized");
+      console.log("Backend services initialized");
 
-      // Start the server
       this.app.getApp().listen(this.port, () => {
         console.log(`🚀 Server running on port ${this.port}`);
         
@@ -70,58 +65,47 @@ class Server {
     try {
       await this.fsService.connect();
       console.log("✅ FreeSWITCH ESL connection established");
-      
-      // Setup periodic health check
       this.setupFreeSwitchHealthCheck();
       
     } catch (error) {
       console.error("❌ Failed to connect to FreeSWITCH:", error.message);
-      console.log("⚠️ Server will continue without FreeSWITCH (calls will be disabled)");
-      console.log("💡 To enable calls, please install and configure FreeSWITCH");
-      
-      // Don't setup retry mechanism to avoid continuous errors
-      // this.setupFreeSwitchRetry();
     }
   }
 
   setupFreeSwitchHealthCheck() {
-    // Check FreeSWITCH connection every 30 seconds
     setInterval(async () => {
       try {
         if (!this.fsService.isConnectedToFreeSwitch()) {
-          console.log("🔄 FreeSWITCH disconnected, attempting reconnection...");
+          console.log("FreeSWITCH disconnected, attempting reconnection...");
           await this.fsService.connect();
-          console.log("✅ FreeSWITCH reconnected");
+          console.log("FreeSWITCH reconnected");
         }
       } catch (error) {
-        console.error("❌ FreeSWITCH health check failed:", error.message);
+        console.error("FreeSWITCH health check failed:", error.message);
       }
     }, 30000);
   }
 
-  setupFreeSwitchRetry() {
-    // Retry FreeSWITCH connection every 60 seconds
-    const retryInterval = setInterval(async () => {
-      try {
-        console.log("🔄 Retrying FreeSWITCH connection...");
-        await this.fsService.connect();
-        console.log("✅ FreeSWITCH connected successfully");
-        clearInterval(retryInterval);
+  // setupFreeSwitchRetry() {
+  //   const retryInterval = setInterval(async () => {
+  //     try {
+  //       console.log("🔄 Retrying FreeSWITCH connection...");
+  //       await this.fsService.connect();
+  //       console.log("✅ FreeSWITCH connected successfully");
+  //       clearInterval(retryInterval);
         
-        // Setup health check after successful connection
-        this.setupFreeSwitchHealthCheck();
+  //       this.setupFreeSwitchHealthCheck();
         
-      } catch (error) {
-        console.log("❌ FreeSWITCH retry failed:", error.message);
-      }
-    }, 60000);
-  }
+  //     } catch (error) {
+  //       console.log("❌ FreeSWITCH retry failed:", error.message);
+  //     }
+  //   }, 60000);
+  // }
 
   async gracefulShutdown() {
     try {
       console.log("🛑 Shutting down gracefully...");
       
-      // Stop cron jobs
       console.log("⏰ Stopping cron jobs...");
       this.cronService.stop();
       console.log("✅ Cron jobs stopped");
@@ -137,11 +121,7 @@ class Server {
         console.log("🔌 FreeSWITCH service was disabled");
       }
       
-      // Disconnect database
-      console.log("🗄️ Disconnecting from database...");
-      // await new Database().disconnect();
-      console.log("✅ Database disconnected");
-      
+
       console.log("✅ Server shutdown completed");
       process.exit(0);
     } catch (error) {
@@ -151,7 +131,6 @@ class Server {
   }
 }
 
-// Start the server
 new Server().start().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);

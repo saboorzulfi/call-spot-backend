@@ -1,5 +1,4 @@
 const CallRepository = require("../repositories/call.repository");
-const LeadRepository = require("../repositories/lead.repository");
 const UltraSimpleCallService = require("../../services/ultra-simple-call.service");
 const AppResponse = require("../../utils/response.util");
 const AppError = require("../../utils/app_error.util");
@@ -11,7 +10,6 @@ const { CallDTO } = require("../dtos/return");
 class CallController {
   constructor() {
     this.callRepo = new CallRepository();
-    this.leadRepo = new LeadRepository();
     // Call queue service will be created on-demand
   }
 
@@ -171,27 +169,23 @@ class CallController {
 
       const callRequest = this.processRow(row);
       console.log(callRequest, "callRequest");
-      // Create or update lead first (like Go backend)
-      const leadData = {
-        account_id: accountId,
-        name: callRequest.name,
-        phone: callRequest.phone_number,
-        source_type: "import",
-        source_id: campaign._id.toString(),
-        data_fields: callRequest.data_fields || {}
-      };
-
-      const lead = await this.leadRepo.upsert(leadData);
-
-      // Create call with lead data
+      
+      // Generate unique source_id for imported calls (using timestamp + index)
+      const importSourceId = `import_${Date.now()}_${i}_${campaign._id.toString()}`;
+      
+      // Create call directly (no Lead model needed)
       const callData = {
         account_id: accountId,
         campaign_id: campaign._id,
         call_origination_id: new (require("mongoose")).Types.ObjectId(),
         source_type: "import",
-        source_id: campaign._id.toString(),
+        source_id: importSourceId, // Unique ID for imported calls
         campaign_name: campaign.name,
-        lead_data: lead.data_fields,
+        lead_data: {
+          phone_number: callRequest.phone_number,
+          name: callRequest.name,
+          ...callRequest.data_fields
+        },
         call_status: {
           call_state: "scheduled",
           description: "Imported Call"
